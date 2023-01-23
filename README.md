@@ -4,7 +4,7 @@ Minimalistic dependency injection implementation without decorators
 ## Usage and examples
 
 ```javascript
-const {DI} = require('mini-di');
+const {DI} = require('mini-inject');
 
 class A {
     value = 0;
