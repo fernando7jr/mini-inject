@@ -1,14 +1,11 @@
 {
-  "name": "mini-di",
+  "name": "mini-inject",
   "version": "1.0.0",
   "description": "Minimalistic dependency injection implementation",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fernando7jr/mini-di.git"
+    "url": "git+https://github.com/fernando7jr/mini-inject.git"
   },
   "keywords": [
     "injection"
@@ -16,7 +13,7 @@
   "author": "metadeta96",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/fernando7jr/mini-di/issues"
+    "url": "https://github.com/fernando7jr/mini-inject/issues"
   },
-  "homepage": "https://github.com/fernando7jr/mini-di#readme"
+  "homepage": "https://github.com/fernando7jr/mini-inject#readme"
 }
