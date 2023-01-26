@@ -23,5 +23,5 @@ export class DI {
      * @param {boolean} opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
      * @returns {this} this
      */
-    bind<T>(injectable: Injectable<T>, func: BindingFunc<T>, opts: {isSingleton: boolean}): this;
+    bind<T>(injectable: Injectable<T>, func: BindingFunc<T>, opts?: {isSingleton: boolean}): this;
 }
