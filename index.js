@@ -9,22 +9,25 @@ function resolveKey(injectable) {
 
 module.exports.DI = class DI {
     #container = new Map();
+    /** @type {Map<string, {func: Function, isSingleton: boolean}>} */
     #bindings = new Map();
 
     get(injectable) {
         const key = resolveKey(injectable);
-        if (!this.#container.has(key)) {
-            const constructor_ = this.#bindings.get(key);
-            if (!constructor_) throw new Error(`No binding for injectable "${key}"`);
-            const instance = constructor_(this);
+        const binding = this.#bindings.get(key);
+        if (!binding || !binding.func) throw new Error(`No binding for injectable "${key}"`);
+        else if (!binding.isSingleton) return binding.func(this);
+        else if (!this.#container.has(key)) {
+            const instance = binding.func(this);
             this.#container.set(key, instance);
         }
         return this.#container.get(key);
     }
 
-    bind(injectable, func) {
+    bind(injectable, func, opts) {
+        const { isSingleton = true } = opts || {};
         const key = resolveKey(injectable);
-        this.#bindings.set(key, func);
+        this.#bindings.set(key, {func, isSingleton});
         return this;
     }
 }
