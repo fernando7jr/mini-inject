@@ -34,6 +34,31 @@ class C {
     }
 }
 
+class A1 {
+    constructor(n, a2) {
+        this.n = n;
+        this.a2 = a2;
+    }
+
+    get value() {
+        return this.n + this.a2.n;
+    }
+}
+
+class A2 {
+    /** @type {import('./index').DIResolver<A1>} */
+    a1 = null;
+
+    constructor(n, a1) {
+        this.n = n;
+        this.a1 = a1;
+    }
+
+    get value() {
+        return this.a1.get().n - this.n;
+    }
+}
+
 test('Singlethon', async (t) => {
     const di = new DI();
     di.bind(A, () => new A(5));
@@ -94,4 +119,43 @@ test('Should throw when can not find a binding', (t) => {
     t.notThrows(() => di.get(A));
     t.throws(() => di.get(C), {message: 'No binding for injectable "B"'});
     t.throws(() => di.get(B), {message: 'No binding for injectable "B"'});
+});
+
+test('Should solve the circular dependency problem through "getResolver"', (t) => {
+    const di = new DI();
+    di.bind(A1, () => new A1(5, di.get(A2)));
+    di.bind(A2, () => new A2(2, di.getResolver(A1)));
+
+    const a1 = di.get(A1);
+    const a2 = di.get(A2);
+
+    t.truthy(a1);
+    t.truthy(a2);
+    t.is(a1.value, 7);
+    t.is(a2.value, 3);
+});
+
+test('Should solve the circular dependency problem through "lateResolve"', (t) => {
+    const A2 = class {
+        constructor(n, a1) {
+            this.n = n;
+            this.a1 = a1;
+        }
+    
+        get value() {
+            return this.a1.n - this.n;
+        }
+    }
+
+    const di = new DI();
+    di.bind(A1, () => new A1(5, di.get(A2)), {lateResolve: true});
+    di.bind(A2, () => new A2(2, di.get(A1)));
+
+    const a1 = di.get(A1);
+    const a2 = di.get(A2);
+
+    t.truthy(a1);
+    t.truthy(a2);
+    t.is(a1.value, 7);
+    t.is(a2.value, 3);
 });

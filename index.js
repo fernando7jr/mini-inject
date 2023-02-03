@@ -7,10 +7,43 @@ function resolveKey(injectable) {
     return new String(injectable);
 }
 
+class DIProxyBuilder {
+    #hasInstance = false;
+    #__instance;
+    /** @type {() => any} */
+    #getter = null;
+    constructor(getter) {
+        this.#getter = getter;
+    }
+
+    #getInstance() {
+        if (!this.#hasInstance) {
+            this.#__instance = this.#getter();
+            this.#hasInstance = true;
+        }
+        return this.#__instance;
+    }
+
+    build() {
+        const getInstance = () => this.#getInstance();
+        const handler = {
+            get(_, p) {
+                return getInstance()[p];
+            }
+        };
+        return new Proxy(this, handler);
+    }
+}
+
 module.exports.DI = class DI {
     #container = new Map();
-    /** @type {Map<string, {func: Function, isSingleton: boolean}>} */
+    /** @type {Map<string, {func: Function, isSingleton: boolean, lateResolve: boolean}>} */
     #bindings = new Map();
+
+    #proxy(binding) {
+        const getter = () => binding.func(this);
+        return new DIProxyBuilder(getter).build();
+    }
 
     get(injectable) {
         const key = resolveKey(injectable);
@@ -18,16 +51,25 @@ module.exports.DI = class DI {
         if (!binding || !binding.func) throw new Error(`No binding for injectable "${key}"`);
         else if (!binding.isSingleton) return binding.func(this);
         else if (!this.#container.has(key)) {
-            const instance = binding.func(this);
-            this.#container.set(key, instance);
+            if (binding.lateResolve) {
+                this.#container.set(key, this.#proxy(binding));
+            } else {
+                const instance = binding.func(this);
+                this.#container.set(key, instance);
+            }
         }
         return this.#container.get(key);
     }
 
+    getResolver(injectable) {
+        const _get = () => this.get(injectable);
+        return {get: _get};
+    }
+
     bind(injectable, func, opts) {
-        const { isSingleton = true } = opts || {};
+        const { isSingleton = true, lateResolve = false } = opts || {};
         const key = resolveKey(injectable);
-        this.#bindings.set(key, {func, isSingleton});
+        this.#bindings.set(key, {func, isSingleton, lateResolve});
         return this;
     }
 }
