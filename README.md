@@ -22,10 +22,16 @@ class C {
 }
 
 const di = new DI();
+// Bind the classes A, B and C assigning a function for instanciation
 di
     .bind(A, (di) => new A())                       // A is a singleton dependency
     .bind(B, (di) => new B(), {isSingleton: false}) // B is not a singleton dependency
     .bind(C, (di) => new C(di.get(A), di.get(B)));  // C is a singleton dependency
+// Or let `mini-inject` generate the binding function from an array of dependencies
+di
+    .bind(A, [])                       // A is a singleton dependency
+    .bind(B, [], {isSingleton: false}) // B is not a singleton dependency
+    .bind(C, [A, B]);                  // C is a singleton dependency
 
 const a = di.get(A);
 console.log(a.value); // 0

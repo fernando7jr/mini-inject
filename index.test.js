@@ -59,7 +59,7 @@ class A2 {
     }
 }
 
-test('Singlethon', async (t) => {
+test('Should bind as Singlethon', async (t) => {
     const di = new DI();
     di.bind(A, () => new A(5));
     di.bind(C, (di) => new C(di.get(A), di.get(B)));
@@ -85,7 +85,7 @@ test('Singlethon', async (t) => {
     t.is(c.id, c2.id);
 });
 
-test('Non-Singlethon', async (t) => {
+test('Should bind as Non-Singlethon', async (t) => {
     const di = new DI();
     di.bind(A, () => new A(5), {isSingleton: false});
     di.bind(C, (di) => new C(di.get(A), di.get(B)), {isSingleton: false});
@@ -111,14 +111,29 @@ test('Non-Singlethon', async (t) => {
     t.not(c.id, c2.id);
 });
 
-test('Should throw when can not find a binding', (t) => {
-    const di = new DI();
-    di.bind(A, () => new A(5), {isSingleton: false});
-    di.bind(C, (di) => new C(di.get(A), di.get(B)), {isSingleton: false});
+test('Should accept symbols for binding', (t) => {
+    const symbolA = Symbol('A');
+    const symbolB = Symbol('B');
+    const symbolC = Symbol('C');
 
-    t.notThrows(() => di.get(A));
-    t.throws(() => di.get(C), {message: 'No binding for injectable "B"'});
-    t.throws(() => di.get(B), {message: 'No binding for injectable "B"'});
+    const di = new DI();
+    di.bind(symbolA, () => new A(5));
+    di.bind(symbolB, () => new B(5));
+    di.bind(symbolC, (di) => new C(di.get(symbolA), di.get(symbolB)));
+
+    t.notThrows(() => di.get(symbolA));
+    t.notThrows(() => di.get(symbolB));
+    t.notThrows(() => di.get(symbolC));
+
+    const { a, b, c } = {
+        a: di.get(symbolA),
+        b: di.get(symbolB),
+        c: di.get(symbolC),
+    };
+
+    t.truthy(a instanceof A);
+    t.truthy(b instanceof B);
+    t.truthy(c instanceof C);
 });
 
 test('Should solve the circular dependency problem through "getResolver"', (t) => {
@@ -133,6 +148,18 @@ test('Should solve the circular dependency problem through "getResolver"', (t) =
     t.truthy(a2);
     t.is(a1.value, 7);
     t.is(a2.value, 3);
+});
+
+test('Should throw when can not find a binding', (t) => {
+    const di = new DI();
+    di.bind(A, () => new A(5), {isSingleton: false});
+    di.bind(C, (di) => new C(di.get(A), di.get(B)), {isSingleton: false});
+
+    t.notThrows(() => di.get(A));
+    t.throws(() => di.get(C), {message: 'No binding for injectable "B"'});
+    t.throws(() => di.get(B), {message: 'No binding for injectable "B"'});
+    t.throws(() => di.get('TEST'), {message: 'No binding for injectable "TEST"'});
+    t.throws(() => di.get(Symbol("B")), {message: 'No binding for injectable "Symbol(B)"'});
 });
 
 test('Should solve the circular dependency problem through "lateResolve"', (t) => {
@@ -158,4 +185,31 @@ test('Should solve the circular dependency problem through "lateResolve"', (t) =
     t.truthy(a2);
     t.is(a1.value, 7);
     t.is(a2.value, 3);
+});
+
+test('Should auto bind using dependencies list', async (t) => {
+    const di = new DI();
+    di.bind(A, () => new A(5));
+    di.bind(B, () => new B(5));
+    di.bind(C, [A, B]);
+
+    const { a, b, c } = {
+        a: di.get(A),
+        b: di.get(B),
+        c: di.get(C),
+    };
+
+    t.truthy(a);
+    t.truthy(b);
+    t.truthy(c);
+    t.is(a.value, 5);
+    t.is(b.value, 10);
+    t.is(c.value, 15);
+});
+
+test('Should throw when binding string using dependencies list', (t) => {
+    const di = new DI();
+    di.bind(A, () => new A(5));
+    di.bind(B, () => new B(5));
+    t.throws(() => di.bind('C', [A, B]), {message: 'Array of dependencies requires a constructable injectable'});
 });

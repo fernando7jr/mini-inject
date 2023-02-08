@@ -36,8 +36,9 @@ class DIProxyBuilder {
 }
 
 export class DI {
+    /** @type {Map<string|Symbol, any>} */
     #container = new Map();
-    /** @type {Map<string, {func: Function, isSingleton: boolean, lateResolve: boolean}>} */
+    /** @type {Map<string|Symbol, {func: Function, isSingleton: boolean, lateResolve: boolean}>} */
     #bindings = new Map();
 
     #proxy(binding) {
@@ -66,7 +67,19 @@ export class DI {
         return {get: _get};
     }
 
-    bind(injectable, func, opts) {
+    bind(injectable, dep, opts) {
+        const dependencies = Array.isArray(dep) ? dep : null;
+        if (dependencies && !injectable?.prototype?.constructor) {
+            throw new Error('Array of dependencies requires a constructable injectable');
+        }
+
+        const func = (() => {
+            if (dependencies) {
+                return (di) => new injectable(...dep.map((d) => di.get(d)));
+            }
+            return dep;
+        })();
+
         const { isSingleton = true, lateResolve = false } = opts || {};
         const key = resolveKey(injectable);
         this.#bindings.set(key, {func, isSingleton, lateResolve});
