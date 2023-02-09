@@ -1,6 +1,7 @@
 export type ClassType = (Function | Object) & { name: string; };
 export type ClassConstructor<T> = ClassType & { new(...args: any): T; };
 export type Injectable<T> = ClassConstructor<T> | string | Symbol;
+export type Dependency = ClassConstructor<any> | string | Symbol;
 export type BindingFunc<T> = (di: DI) => T;
 
 /**
@@ -97,7 +98,7 @@ export class DI {
      * ```
      * 
      */
-    bind<T>(injectable: ClassConstructor<T>, dependencies: Injectable<T>[], opts: {isSingleton?: boolean, lateResolve?: boolean}): this;
+    bind<T>(injectable: ClassConstructor<T>, dependencies: Dependency[], opts?: {isSingleton?: boolean, lateResolve?: boolean}): this;
     /**
      * Bind a class or another constructable object so it can be fetched later
      * @param injectable an injectable class or a string key-value used for the binding
