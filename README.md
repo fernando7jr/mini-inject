@@ -46,6 +46,13 @@ const b = di.get(B);
 console.log(b.value);   // B
 console.log(c.b.value); // BB
 
+// You can also fetch everythin in a single call
+const [a2, b2, c2] = di.getAll(A, B, C);
+console.log(a2.value); // 0
+console.log(b2.value);   // B
+console.log(c2.a.value); // 10
+console.log(c2.b.value); // B
+
 class D {}
 try {
     const d = di.get(D); // There is no binding for D, this will thrown an exception

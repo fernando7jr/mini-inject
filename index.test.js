@@ -213,3 +213,19 @@ test('Should throw when binding string using dependencies list', (t) => {
     di.bind(B, () => new B(5));
     t.throws(() => di.bind('C', [A, B]), {message: 'Array of dependencies requires a constructable injectable'});
 });
+
+test('Should get all dependencies in a single call', async (t) => {
+    const di = new DI();
+    di.bind(A, () => new A(5));
+    di.bind(B, () => new B(5));
+    di.bind(C, [A, B]);
+
+    const [a, b, c] = di.getAll(A, B, C);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.truthy(c);
+    t.is(a.value, 5);
+    t.is(b.value, 10);
+    t.is(c.value, 15);
+});

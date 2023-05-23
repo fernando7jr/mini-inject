@@ -62,6 +62,10 @@ module.exports.DI = class DI {
         return this.#container.get(key);
     }
 
+    getAll(...injectables) {
+        return injectables.map((injectable) => this.get(injectable));
+    }
+
     getResolver(injectable) {
         const _get = () => this.get(injectable);
         return {get: _get};
