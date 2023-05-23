@@ -184,4 +184,4 @@ export class DI {
     bind<T>(injectable: Injectable<T>, func: BindingFunc<T>, opts?: {isSingleton?: boolean, lateResolve?: boolean}): this;
 }
 
-export type DIGetter = Pick<DI, 'get' | 'getResolver'>;
+export type DIGetter = Pick<DI, 'get' | 'getAll' | 'getResolver'>;
