@@ -229,3 +229,15 @@ test('Should get all dependencies in a single call', async (t) => {
     t.is(b.value, 10);
     t.is(c.value, 15);
 });
+
+test('Should use fallback when there is no binding', async (t) => {
+    const di = new DI();
+    t.throws(() => di.get(A), {message: 'No binding for injectable "A"'});
+    const a = di.get(A, null);
+    t.is(a, null);
+    
+    const bResolver = di.getResolver(B);
+    t.throws(() => bResolver.get(), {message: 'No binding for injectable "B"'});
+    const b = bResolver.get(undefined);
+    t.is(b, undefined);
+});

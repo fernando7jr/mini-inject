@@ -46,10 +46,21 @@ export class DI {
         return new DIProxyBuilder(getter).build();
     }
 
-    get(injectable) {
+    get(injectable, fallbackToValue) {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
-        if (!binding || !binding.func) throw new Error(`No binding for injectable "${key}"`);
+
+        /* *
+         * Fallback is only considered if it was provided as an argument
+         * Omitting it means we should throw an error
+         * Failing to resolve the injectable dependencies still gonna throw an error
+         * */
+        const isFallbackProvided = arguments.length > 1;
+
+        if (!binding || !binding.func) {
+            if (isFallbackProvided) return fallbackToValue;
+            throw new Error(`No binding for injectable "${key}"`);
+        }
         else if (!binding.isSingleton) return binding.func(this);
         else if (!this.#container.has(key)) {
             if (binding.lateResolve) {
@@ -67,8 +78,12 @@ export class DI {
     }
 
     getResolver(injectable) {
-        const _get = () => this.get(injectable);
-        return {get: _get};
+        const _this = this;
+        return {
+            get() {
+                return _this.get.call(_this, injectable, ...arguments);
+            }
+        };
     }
 
     bind(injectable, dep, opts) {

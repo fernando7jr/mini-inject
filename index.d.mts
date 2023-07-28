@@ -10,9 +10,59 @@ export type BindingFunc<T> = (di: DI) => T;
 export interface DIResolver<T> {
     /**
      * Get an instance for the previously class binding
-     * @returns an instance of T
+     * @returns an instance of T where T is the template param for this method. Vide the method signature
+     * @example
+     * class A {
+     *  bark() {
+     *   console.log('Bark!');
+     *  }
+     * }
+     * class B {
+     *  constructor (aResovler) {
+     *      this.#aResovler = aResovler;
+     *  }
+     *  
+     *  get a() {
+     *      return this.#aResolver.get();
+     *  }
+     * }
+     * const di = new DI();
+     * di.bind(A, []);
+     * di.bind(B, () => new B(di.getResolver(A)));
+     * 
+     * ...
+     * 
+     * const b = di.get(B); // B resolves to `null` since there is no binding
+     * b.a.bark(); // Bark!
      */
     get(): T;
+    /**
+     * Get an instance for the previously class binding
+     * If the injectable has no binding it will return the value of `fallbackToValue`
+     * Please keep in mind that if the binding method throws an exception the error will still happen. 
+     * This param only avoid throwing "No binding for injectable" when the unavailable binding is the top one
+     * @param fallbackToValue any value which can work as fallback in case the binding does not exists
+     * @returns an instance of T or F where T and F are the template params for this method. Vide the method signature
+     * @example ```javascript
+     * class A {};
+     * class B {constructor (a) {this.a = a;}};
+     * const di = new DI();
+     * 
+     * const aResolver = di.getResolver(A);
+     * const bResolver = di.getResolver(B);
+     * 
+     * const a = aResolver.get(null); // A resolves to `null` since there is no binding
+     * const a2 = aResolver.get(); // This will throw an error since no fallback was provided 
+     * 
+     * const b = bResolver.get(null); // B resolves to `null` since there is no binding
+     * const b2 = bResolver.get(); // This will throw an error since no fallback was provided 
+     * 
+     * di.bind(B, []);
+     * const b3 = bResolver.get(); // This will throw an error since there is no binding for A which is a dependency of B
+     * const b4 = bResolver.get(null); // We still get an error since the fallback only works for the top level which is B in this case
+     * ```
+     */
+    get<F>(fallbackToValue: F): T | F;
 }
 
 /**
@@ -61,6 +111,55 @@ export class DI {
      * 
      */
     get<T>(injectable: Injectable<T>): T;
+    /**
+     * Get an instance for the previously class binding
+     * If the injectable has no binding it will return the value of `fallbackToValue`
+     * Please keep in mind that if the binding method throws an exception the error will still happen. 
+     * This param only avoid throwing "No binding for injectable" when the unavailable binding is the top one
+     * @param fallbackToValue any value which can work as fallback in case the binding does not exists
+     * @returns an instance of T or F where T and F are the template params for this method. Vide the method signature
+     * 
+     * @example
+     * ```javascript
+     * class A {
+     *   meow() {
+     *     console.log('Meow!!');
+     *   }
+     * }
+     * class B {
+     *   bark() {
+     *     console.log('Bark!!');
+     *   }
+     * }
+     * class C {
+     *   constructor(a, b) {
+     *     this.a = a;
+     *     this.b = b;
+     *   }
+     * }
+     * class D {}
+     * 
+     * const di = new DI();
+     * di.bind(A, []);     // generates (di) => new A()
+     * di.bind(B, []);     // generates (di) => new B()
+     * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+     * 
+     * const a = di.get(A);
+     * console.log(a.meow()); // Meow!!
+     * 
+     * const b = di.get(B);
+     * console.log(b.bark()); // Bark!!
+     * 
+     * const c = di.get(C);
+     * console.log(c.a.meow()); // Meow!!
+     * console.log(c.b.bark()); // Bark!!
+     * 
+     * const d = di.get(D, null); // D is `null` since there is no binding for D. This does not thrown an error
+     * const d2 = di.get(D); // This will thrown an error since there is no fallback for D
+     * ```
+     * 
+     */
+    get<T, F>(injectable: Injectable<T>, fallbackToValue: F): T | F;
 
     /**
      * Get all instances for the previously class bindings

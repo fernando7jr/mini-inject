@@ -1,5 +1,18 @@
-# mini-di
+# mini-inject
 Minimalistic dependency injection implementation without decorators
+
+## Installation
+
+MiniInject is available as the [package inject](https://www.npmjs.com/package/mini-inject).
+
+`npm i mini-inject`
+
+The package provides both cjs and mjs files along the type definitions.
+
+## Support
+
+I am activaly working on this project. 
+Use the github page for opening issues or discussions.
 
 ## Usage and examples
 
