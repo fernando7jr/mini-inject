@@ -1,28 +1,33 @@
 # mini-inject
-Minimalistic dependency injection implementation without decorators
+Minimalistic dependency injection implementation without decorators (less than 100kb after installing)
 
-MiniInject is offered as both CommonJS and ESModule files
+MiniInject is offered as both CommonJS and ESModule files and there are no dependencies except for testing
+
+The goal is to offer dependency injection as complete as possible with the most simple code that anyone can read
+
+Everything runs synchronously and no need to add a bunch of decorators everywhere. It works as intended and there is no blackbox or magic
 
 ## Installation
 
-MiniInject is available as the [package inject](https://www.npmjs.com/package/mini-inject).
+MiniInject is available as the [package mini-inject](https://www.npmjs.com/package/mini-inject).
 
 `npm i mini-inject`
 
 The package provides both cjs and mjs files along the type definitions.
 
-There is no need to install any type definition package, we provide all type declartions on `.d.ts` files
+There is no need to install any type definition package, we provide all type declartions on `.d.ts` files and all public methods are documented with examples
 
 ## Support
 
-I am activaly working on this project. 
+I am activaly working on this project.
+
 Use the github page for opening issues or discussions.
 
 ## Usage and examples
 
 ```javascript
 const {DI} = require('mini-inject');
-//or use the mts file
+//or use the mjs file. We provide .js, .cjs and .mjs extensions
 import {DI} from 'mini-inject';
 
 class A {
@@ -80,6 +85,10 @@ try {
 } catch(err) {
     console.error(err); // Error: No binding for injectable "D"
 }
+let d = di.get(D, 1);     // There is no binding for D, but since we provided a fallback no exception is thrown
+console.log(d);           // 1
+d = di.get(D, undefined); // The fallback can be anything even undefined as long as it is in the arguments list
+console.log(d);           // undefined
 
 // Circular Dependency
 /// Solved through lateResolve param

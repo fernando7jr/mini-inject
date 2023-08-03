@@ -182,7 +182,7 @@ export class DI {
      * @param injectable an injectable class or a string key-value used for the binding
      * @returns the binding if available otherwise undefined
      */
-    getBinding<T>(injectable: Injectable<T>): {isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T} | undefined;
+    getBinding<T>(injectable: Injectable<T>): { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T; } | undefined;
 
     /**
      * Get an instance for the previously class binding
@@ -368,7 +368,7 @@ export class DI {
      * ```
      * 
      */
-    bind<T>(injectable: ClassConstructor<T>, dependencies: Dependency[], opts?: {isSingleton?: boolean, lateResolve?: boolean}): this;
+    bind<T>(injectable: ClassConstructor<T>, dependencies: Dependency[], opts?: { isSingleton?: boolean, lateResolve?: boolean; }): this;
     /**
      * Bind a class or another constructable object so it can be fetched later
      * @param injectable an injectable class or a string key-value used for the binding
@@ -395,7 +395,7 @@ export class DI {
      * ``` 
      * 
      */
-    bind<T>(injectable: Injectable<T>, func: BindingFunc<T>, opts?: {isSingleton?: boolean, lateResolve?: boolean}): this;
+    bind<T>(injectable: Injectable<T>, func: BindingFunc<T>, opts?: { isSingleton?: boolean, lateResolve?: boolean; }): this;
 }
 
 export type DIGetter = Pick<DI, 'get' | 'getAll' | 'getResolver'>;

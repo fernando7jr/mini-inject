@@ -36,7 +36,7 @@ class DIProxyBuilder {
         const handler = {
             get(_, p) {
                 return getInstance()[p];
-            }
+            },
         };
         return new Proxy(this, handler);
     }
@@ -78,7 +78,7 @@ class DI {
         const binding = this.#bindings.get(key);
         if (!binding?.func) return;
         return {
-            isSingleton: Boolean(binding.isSingleton), 
+            isSingleton: Boolean(binding.isSingleton),
             lateResolve: Boolean(binding.lateResolve),
             resolveFunction: binding.func,
         };
@@ -90,15 +90,14 @@ class DI {
 
         if (!binding || !binding.func) {
             /* *
-            * Fallback is only considered if it was provided as an argument
-            * Omitting it means we should throw an error
-            * Failing to resolve the injectable dependencies still gonna throw an error
-            * */
+             * Fallback is only considered if it was provided as an argument
+             * Omitting it means we should throw an error
+             * Failing to resolve the injectable dependencies still gonna throw an error
+             * */
             const isFallbackProvided = arguments.length > 1;
             if (isFallbackProvided) return fallbackToValue;
             throw new Error(`No binding for injectable "${key}"`);
-        }
-        else if (!binding.isSingleton) return binding.func(this);
+        } else if (!binding.isSingleton) return binding.func(this);
         else if (!this.#container.has(key)) {
             if (binding.lateResolve) {
                 this.#container.set(key, this.#proxy(binding));
@@ -119,7 +118,7 @@ class DI {
         return {
             get() {
                 return _this.get.call(_this, injectable, ...arguments);
-            }
+            },
         };
     }
 
@@ -145,10 +144,14 @@ class DI {
             return dep;
         })();
 
-        const { isSingleton = true, lateResolve = false } = opts || {};
+        const {isSingleton = true, lateResolve = false} = opts || {};
         const key = resolveKey(injectable);
         if (this.#container.has(key)) this.#container.delete(key);
-        this.#bindings.set(key, {func, isSingleton, lateResolve: dependenciesArrayIsEmpty ? false : lateResolve});
+        this.#bindings.set(key, {
+            func,
+            isSingleton,
+            lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
+        });
         return this;
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "mini-inject",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Minimalistic dependency injection implementation",
   "type": "commonjs",
   "main": "index.js",
@@ -19,7 +19,10 @@
     "url": "git+https://github.com/fernando7jr/mini-inject.git"
   },
   "keywords": [
-    "injection"
+    "injection",
+    "dependency",
+    "di",
+    "typescript"
   ],
   "author": "metadeta96",
   "license": "MIT",
