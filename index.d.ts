@@ -70,6 +70,15 @@ export interface DIResolver<T> {
  */
 export class DI { 
     /**
+     * Get the binding for the injectable if available otherwise return undefined
+     * The binding consists of its parameters and a resolving function for returning the instance 
+     * Only known parameters are returned
+     * @param injectable an injectable class or a string key-value used for the binding
+     * @returns the binding if available otherwise undefined
+     */
+    getBinding<T>(injectable: Injectable<T>): {isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T} | undefined;
+
+    /**
      * Get an instance for the previously class binding
      * @param injectable an injectable class or a string key-value used for the binding
      * @returns an instance of T
@@ -227,7 +236,8 @@ export class DI {
     /**
      * Bind a class or another constructable object so it can be fetched later
      * The binding method is generated automatically from the injectable and array of dependencies
-     * Passing a non constructable class or function along an array of dependencies will throw an error 
+     * Passing a non constructable class or function along an array of dependencies will throw an error
+     * An empty dependencies array will always override the param lateResolve to false
      * 
      * @param injectable an injectable class used for the binding. Must be a constructable class or function
      * @param dependencies array of dependencies to be used when instanciating the injectable. The most be specified at the same order that the constructor parameters

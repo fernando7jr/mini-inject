@@ -241,3 +241,36 @@ test('Should use fallback when there is no binding', async (t) => {
     const b = bResolver.get(undefined);
     t.is(b, undefined);
 });
+
+test('Should get the binding for injectables', async (t) => {
+    const di = new DI();
+    di.bind(A, () => new A(5), {isSingleton: false});
+    di.bind(B, () => new B(5));
+    di.bind(C, [A, B], {lateResolve: true});
+
+    const testBinding = (binding, compareTo) => {
+        t.truthy(binding);
+        t.is(binding.isSingleton, compareTo.isSingleton);
+        t.is(binding.lateResolve, compareTo.lateResolve);
+        t.truthy(binding.resolveFunction);
+        t.is(typeof binding.resolveFunction === 'function', true);
+    };
+
+    testBinding(di.getBinding(A), {isSingleton: false, lateResolve: false});
+    testBinding(di.getBinding(B), {isSingleton: true, lateResolve: false});
+    testBinding(di.getBinding(C), {isSingleton: true, lateResolve: true});
+    t.is(di.getBinding(A1), undefined);
+    t.is(di.getBinding(A2), undefined);
+});
+
+test('Should override lateResolve to false when dependencies array is empty', async (t) => {
+    const di = new DI();
+    di.bind(A, [], {lateResolve: true});
+
+    const binding = di.getBinding(A);
+    t.truthy(binding);
+    t.is(binding.lateResolve, false);
+    t.is(binding.isSingleton, true);
+    t.truthy(binding.resolveFunction);
+    t.is(typeof binding.resolveFunction === 'function', true);
+});

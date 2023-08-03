@@ -70,6 +70,15 @@ export interface DIResolver<T> {
  */
 export class DI { 
     /**
+     * Get the binding for the injectable if available otherwise return undefined
+     * The binding consists of its parameters and a resolving function for returning the instance 
+     * Only known parameters are returned
+     * @param injectable an injectable class or a string key-value used for the binding
+     * @returns the binding if available otherwise undefined
+     */
+    getBinding<T>(injectable: Injectable<T>): {isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T} | undefined;
+
+    /**
      * Get an instance for the previously class binding
      * @param injectable an injectable class or a string key-value used for the binding
      * @returns an instance of T

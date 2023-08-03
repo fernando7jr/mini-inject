@@ -46,6 +46,17 @@ export class DI {
         return new DIProxyBuilder(getter).build();
     }
 
+    getBinding(injectable) {
+        const key = resolveKey(injectable);
+        const binding = this.#bindings.get(key);
+        if (!binding?.func) return;
+        return {
+            isSingleton: Boolean(binding.isSingleton), 
+            lateResolve: Boolean(binding.lateResolve),
+            resolveFunction: binding.func,
+        };
+    }
+
     get(injectable, fallbackToValue) {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
@@ -88,6 +99,7 @@ export class DI {
 
     bind(injectable, dep, opts) {
         const dependencies = Array.isArray(dep) ? dep : null;
+        const dependenciesArrayIsEmpty = dependencies?.length === 0;
         if (dependencies && !injectable?.prototype?.constructor) {
             throw new Error('Array of dependencies requires a constructable injectable');
         }
@@ -101,7 +113,7 @@ export class DI {
 
         const { isSingleton = true, lateResolve = false } = opts || {};
         const key = resolveKey(injectable);
-        this.#bindings.set(key, {func, isSingleton, lateResolve});
+        this.#bindings.set(key, {func, isSingleton, lateResolve: dependenciesArrayIsEmpty ? false : lateResolve});
         return this;
     }
 }
