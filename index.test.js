@@ -138,16 +138,33 @@ test('Should accept symbols for binding', (t) => {
 
 test('Should solve the circular dependency problem through "getResolver"', (t) => {
     const di = new DI();
-    di.bind(A1, () => new A1(5, di.get(A2)));
-    di.bind(A2, () => new A2(2, di.getResolver(A1)));
+    // Using function to isntanciate the classes
+    {
+        di.bind(A1, () => new A1(5, di.get(A2)));
+        di.bind(A2, () => new A2(2, di.getResolver(A1)));
+    
+        const a1 = di.get(A1);
+        const a2 = di.get(A2);
+    
+        t.truthy(a1);
+        t.truthy(a2);
+        t.is(a1.value, 7);
+        t.is(a2.value, 3);
+    }
 
-    const a1 = di.get(A1);
-    const a2 = di.get(A2);
-
-    t.truthy(a1);
-    t.truthy(a2);
-    t.is(a1.value, 7);
-    t.is(a2.value, 3);
+    // Using dependencies array
+    {
+        di.bind(A1, [di.literal(8), A2]);
+        di.bind(A2, [di.literal(1), di.literal(di.getResolver(A1))]);
+    
+        const a1 = di.get(A1);
+        const a2 = di.get(A2);
+    
+        t.truthy(a1);
+        t.truthy(a2);
+        t.is(a1.value, 9);
+        t.is(a2.value, 7);
+    }
 });
 
 test('Should throw when can not find a binding', (t) => {
@@ -273,4 +290,47 @@ test('Should override lateResolve to false when dependencies array is empty', as
     t.is(binding.isSingleton, true);
     t.truthy(binding.resolveFunction);
     t.is(typeof binding.resolveFunction === 'function', true);
+});
+
+test('Should allow dependencies to be literal values rather than injectables only', async (t) => {
+    const di = new DI();
+
+    // Using the class method
+    di.bind(A, [DI.literal(5)]);
+    di.bind(B, [DI.literal(5)]);
+
+    let [a, b] = di.getAll(A, B);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.is(a.value, 5);
+    t.is(b.value, 10);
+
+    // Using the instance method
+    di.bind(A, [di.literal(7)]);
+    di.bind(B, [di.literal(7)]);
+
+    [a, b] = di.getAll(A, B);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.is(a.value, 7);
+    t.is(b.value, 14);
+});
+
+test('Should correctly use new or apply depending on the injectable type', async (t) => {
+    const di = new DI();
+    function fB(x) {
+        return new B(x);
+    }
+
+    di.bind(A, [DI.literal(5)]);
+    di.bind(fB, [DI.literal(5)]);
+
+    let [a, b] = di.getAll(A, fB);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.is(a.value, 5);
+    t.is(b.value, 10);
 });

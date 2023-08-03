@@ -1,3 +1,10 @@
+function isClass(f) {
+    if (typeof f !== 'function') return false;
+    const prototype = Object.getOwnPropertyDescriptor(f, 'prototype');
+    if (!prototype) return false;
+    return !prototype.writable;
+}
+
 function resolveKey(injectable) {
     if (!injectable) throw new Error(`Could not resolve injectable name from "${injectable}"`);
     else if (typeof injectable === 'string') return injectable;
@@ -35,6 +42,18 @@ class DIProxyBuilder {
     }
 }
 
+export class DILiteral {
+    #value = undefined;
+
+    constructor(value) {
+        this.#value = value;
+    }
+
+    get value() {
+        return this.#value;
+    }
+}
+
 export class DI {
     /** @type {Map<string|Symbol, any>} */
     #container = new Map();
@@ -44,6 +63,14 @@ export class DI {
     #proxy(binding) {
         const getter = () => binding.func(this);
         return new DIProxyBuilder(getter).build();
+    }
+
+    static literal(value) {
+        return new DILiteral(value);
+    }
+
+    literal(value) {
+        return DI.literal(value);
     }
 
     getBinding(injectable) {
@@ -61,14 +88,14 @@ export class DI {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
 
-        /* *
-         * Fallback is only considered if it was provided as an argument
-         * Omitting it means we should throw an error
-         * Failing to resolve the injectable dependencies still gonna throw an error
-         * */
-        const isFallbackProvided = arguments.length > 1;
-
+        
         if (!binding || !binding.func) {
+            /* *
+             * Fallback is only considered if it was provided as an argument
+             * Omitting it means we should throw an error
+             * Failing to resolve the injectable dependencies still gonna throw an error
+             * */
+            const isFallbackProvided = arguments.length > 1;
             if (isFallbackProvided) return fallbackToValue;
             throw new Error(`No binding for injectable "${key}"`);
         }
@@ -106,13 +133,22 @@ export class DI {
 
         const func = (() => {
             if (dependencies) {
-                return (di) => new injectable(...dep.map((d) => di.get(d)));
+                /** @param {DI} di */
+                return (di) => {
+                    const resolvedDependencies = dependencies.map((d) => {
+                        if (d instanceof DILiteral) return d.value;
+                        return di.get(d);
+                    });
+                    if (!isClass(injectable)) return injectable.apply(injectable, resolvedDependencies);
+                    return new injectable(...resolvedDependencies);
+                };
             }
             return dep;
         })();
 
         const { isSingleton = true, lateResolve = false } = opts || {};
         const key = resolveKey(injectable);
+        if (this.#container.has(key)) this.#container.delete(key);
         this.#bindings.set(key, {func, isSingleton, lateResolve: dependenciesArrayIsEmpty ? false : lateResolve});
         return this;
     }

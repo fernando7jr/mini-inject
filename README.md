@@ -1,6 +1,8 @@
 # mini-inject
 Minimalistic dependency injection implementation without decorators
 
+MiniInject is offered as both CommonJS and ESModule files
+
 ## Installation
 
 MiniInject is available as the [package inject](https://www.npmjs.com/package/mini-inject).
@@ -8,6 +10,8 @@ MiniInject is available as the [package inject](https://www.npmjs.com/package/mi
 `npm i mini-inject`
 
 The package provides both cjs and mjs files along the type definitions.
+
+There is no need to install any type definition package, we provide all type declartions on `.d.ts` files
 
 ## Support
 
@@ -18,9 +22,13 @@ Use the github page for opening issues or discussions.
 
 ```javascript
 const {DI} = require('mini-inject');
+//or use the mts file
+import {DI} from 'mini-inject';
 
 class A {
-    value = 0;
+    constructor(value) {
+        this.value = value;
+    }
 }
 
 class B {
@@ -37,14 +45,14 @@ class C {
 const di = new DI();
 // Bind the classes A, B and C assigning a function for instanciation
 di
-    .bind(A, (di) => new A())                       // A is a singleton dependency
+    .bind(A, (di) => new A(0))                       // A is a singleton dependency
     .bind(B, (di) => new B(), {isSingleton: false}) // B is not a singleton dependency
     .bind(C, (di) => new C(di.get(A), di.get(B)));  // C is a singleton dependency
 // Or let `mini-inject` generate the binding function from an array of dependencies
 di
-    .bind(A, [])                       // A is a singleton dependency
+    .bind(A, [di.literal(0)])          // A is a singleton dependency. The param 0 is not a injectable dependency, so we set it as a literal
     .bind(B, [], {isSingleton: false}) // B is not a singleton dependency
-    .bind(C, [A, B]);                  // C is a singleton dependency
+    .bind(C, [A, B]);                  // C is a singleton dependency. Both A and B have bindings, so `mini-inject` will resolve it automatically
 
 const a = di.get(A);
 console.log(a.value); // 0
@@ -97,8 +105,8 @@ class A2 {
     }
 }
 
-di.bind(A1, () => new B1(5, di.get(A2)), {lateResolve: true});
-di.bind(A2, () => new B2(2, di.get(A1))); // A2 will receive a late resolver for A1
+di.bind(A1, [di.literal(5), A2], {lateResolve: true});
+di.bind(A2, [di.literla(2), A1]); // A2 will receive a late resolver for A1
 
 const a1 = di.get(A1); // Does not cause stack-overflow
 const a2 = di.get(A2); // Does not cause stack-overflow
@@ -132,8 +140,8 @@ class B2 {
     }
 }
 
-di.bind(B1, () => new B1(5, di.get(B2)));
-di.bind(B2, () => new B2(2, di.getResolver(B1))); // A2 will receive a late resolver for A1
+di.bind(B1, [di.literal(5), B2]);
+di.bind(B2, [di.literal(2), di.literal(di.getResolver(B1))]); // A2 will receive a late resolver for A1
 
 const b1 = di.get(B1); // Does not cause stack-overflow
 const b2 = di.get(B2); // Does not cause stack-overflow

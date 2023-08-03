@@ -66,9 +66,115 @@ export interface DIResolver<T> {
 }
 
 /**
+ * A dependency which is just a plain literal
+ * This can be used to assign parameters which are not part or have no binding such as primitives (number, boolean, string) and plain objects
+ * Rather than using this class directly, prefer to use the method `literal`
+ * @see DI.literal for how to assign literals
+ * @example
+ * ```javascript
+ * class A {
+ *  constructor(n: number) {
+ *   this.n = n;
+ *  }
+ * }
+ * class B {
+ *  constructor(a: A, n: number) {
+ *   this.a = a;
+ *   this._n = n;
+ *  }
+ *  
+ *  get n() {
+ *   return this.a + this._n;
+ *  }
+ * }
+ * 
+ * const di = new DI();
+ * di.bind(A, [DI.literal(5)]);     // generates (di) => new A(5)
+ * di.bind(B, [A, DI.literal(7)]); // generates (di) => new B(7
+ * 
+ * const [a, b] = di.getAll(A, B);
+ * console.log(a.n); // 5
+ * console.log(b.n); // 12
+ * ```
+ */
+export class DILiteral<T> {
+    private constructor();
+
+    readonly value: T;
+}
+
+/**
  * Minimalistic class for dependency injection
  */
-export class DI { 
+export class DI {
+    /**
+     * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
+     * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
+     * @param value any value which does not need a binding and will be used as is instead of resolving an instance from an `injectable` or `key`
+     * @returns the `literal` wrapper object
+     * @example
+     * ```javascript
+     * class A {
+     *  constructor(n) {
+     *   this.n = n;
+     *  }
+     * }
+     * class B {
+     *  constructor(a, n) {
+     *   this.a = a;
+     *   this._n = n;
+     *  }
+     *  
+     *  get n() {
+     *   return this.a + this._n;
+     *  }
+     * }
+     * 
+     * const di = new DI();
+     * di.bind(A, [DI.literal(5)]);     // generates (di) => new A(5)
+     * di.bind(B, [A, DI.literal(7)]); // generates (di) => new B(7
+     * 
+     * const [a, b] = di.getAll(A, B);
+     * console.log(a.n); // 5
+     * console.log(b.n); // 12
+     * ```
+     */
+    static literal<T>(value: T): DILiteral<T>;
+    /**
+     * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
+     * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
+     * This method is the same as calling `DI.literal` rather than using the instance
+     * @param value any value which does not need a binding and will be used as is instead of resolving an instance from an `injectable` or `key`
+     * @returns the `literal` wrapper object
+     * @example
+     * ```javascript
+     * class A {
+     *  constructor(n) {
+     *   this.n = n;
+     *  }
+     * }
+     * class B {
+     *  constructor(a, n) {
+     *   this.a = a;
+     *   this._n = n;
+     *  }
+     *  
+     *  get n() {
+     *   return this.a + this._n;
+     *  }
+     * }
+     * 
+     * const di = new DI();
+     * di.bind(A, [di.literal(5)]);     // generates (di) => new A(5)
+     * di.bind(B, [A, di.literal(7)]); // generates (di) => new B(7
+     * 
+     * const [a, b] = di.getAll(A, B);
+     * console.log(a.n); // 5
+     * console.log(b.n); // 12
+     * ```
+     */
+    literal<T>(value: T): DILiteral<T>;
+
     /**
      * Get the binding for the injectable if available otherwise return undefined
      * The binding consists of its parameters and a resolving function for returning the instance 
