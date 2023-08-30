@@ -1,7 +1,7 @@
 export type ClassType = (Function | Object) & { name: string; };
 export type ClassConstructor<T> = ClassType & { new(...args: any): T; };
 export type Injectable<T> = ClassConstructor<T> | string | Symbol;
-export type Dependency = ClassConstructor<any> | string | Symbol;
+export type Dependency = ClassConstructor<any> | string | Symbol | DILiteral<any>;
 export type BindingFunc<T> = (di: DI) => T;
 
 /**
