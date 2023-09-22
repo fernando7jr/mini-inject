@@ -157,3 +157,74 @@ const b2 = di.get(B2); // Does not cause stack-overflow
 console.log(b1.value); // 7
 console.log(b2.value); // 3
 ```
+
+### Sub-Modules
+
+`mini-inject` now supports sub-modules for better managing dependencies. A sub-module is just an instance of `DI` class but is used by the parent module for resolving dependencies when the binding does not exist in the parent module.
+
+Dependency resolution works top-down, so first we check the parent module and if the biding does not exists then we check each sub-module in the order they were added.
+This means that a sub-module does not access the parent bindings but the parent can get the sub-modules bindings.
+
+```javascript
+const {DI} = require('mini-inject');
+const di = new DI();
+
+class A {}
+class B {}
+di.bind(A);
+di.bind(B);
+
+class Sub1A {}
+class Sub1B {}
+const sub1 = new DI();
+sub1.bind(Sub1A);
+sub1.bind(Sub1B);
+
+class Sub2C {}
+class Sub2D {
+    constructor (sub1B, a) {
+        this.sub1B = sub1B;
+        this.a = a;
+    }
+}
+const sub2 = new DI();
+sub2.bind(Sub2C);
+sub2.bind(Sub2D, [Sub1B, A]);
+
+di.subModule(sub1, sub2);
+
+// Those work fine
+di.getAll(A, B, Sub1A, Sub1B, Sub2C); // [A, B, Sub1A, Sub1B, Sub2C]
+sub1.getAll(Sub1A, Sub1B);            // [sub1A, Sub1B]
+sub2.get(Sub2C);                      // Sub2C
+
+// Those will throw errors.
+sub1.get(A);          // sub1 does not have access to A. It throws: Error('No binding for injectable "A"')
+sub2.get(A);          // sub2 does not have access to A. It throws: Error('No binding for injectable "A"')
+sub2.get(Sub2D);      // sub2 does not have access to Sub1B. It throws: Error('No binding for injectable "Sub1B"')
+
+// The solution is to bind `Sub1B` to sub2 module or just add sub1 as a sub-module of sub2 too
+sub2.bind(Sub1B); // or sub2.subModule(sub1);
+// The same problem will still happen if a sub-module needs a dependency that is available in the parent but not in the sub-module
+sub2.get(Sub2D); // sub2 does not have access to A. It throws: Error('No binding for injectable "A"')
+// If we bind `A` to sub2 module then it will work
+sub2.bind(A);
+sub2.get(Sub2D); // Sub2D
+```
+
+## Changelog
+
+#### 1.7
+
+* Added sub-modules through the method `subModule`
+* Added the method `has` to test if there is a binding for an injectable
+* Binding now works without any parameters for constructable classes. Calling just `di.bind(A)` now works as if it were `di.bind(A, [])`
+
+#### 1.6
+
+* Added literals for dependencies
+
+#### 1.5
+
+* Binding with an empty dependency array now automatically set lateResolve flag to `false`
+* Added the method `getBinding` for accessing the inner works of the library

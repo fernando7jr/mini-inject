@@ -108,6 +108,11 @@ export class DILiteral<T> {
  */
 export class DI {
     /**
+     * Minimalistic class for dependency injection
+     */
+    constructor();
+
+    /**
      * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
      * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
      * @param value any value which does not need a binding and will be used as is instead of resolving an instance from an `injectable` or `key`
@@ -183,6 +188,13 @@ export class DI {
      * @returns the binding if available otherwise undefined
      */
     getBinding<T>(injectable: Injectable<T>): { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T; } | undefined;
+
+    /**
+     * Check if the module has a binding for an injectable
+     * @param injectable an injectable class or a string key-value used for the binding
+     * @returns true if the binding exists otherwise false
+     */
+    has<T>(injectable: Injectable<T>): boolean;
 
     /**
      * Get an instance for the previously class binding
@@ -396,6 +408,124 @@ export class DI {
      * 
      */
     bind<T>(injectable: Injectable<T>, func: BindingFunc<T>, opts?: { isSingleton?: boolean, lateResolve?: boolean; }): this;
+    /**
+     * Bind a class or another constructable object so it can be fetched later
+     * The binding method is generated automatically from the injectable and array of dependencies
+     * Passing a non constructable class or function along an array of dependencies will throw an error 
+     * 
+     * @param injectable an injectable class used for the binding. Must be a constructable class or function
+     * @returns this
+     * 
+     * @example
+     * ```javascript
+     * class A {}
+     * class B {}
+     * class C {
+     *   constructor(a, b) {
+     *     this.a = a;
+     *     this.b = b;
+     *   }
+     * }
+     * 
+     * const di = new DI();
+     * di.bind(A);     // generates (di) => new A()
+     * di.bind(B);     // generates (di) => new B()
+     * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+     * ```
+     * 
+     */
+    bind<T>(injectable: ClassConstructor<T>): this;
+
+    /**
+     * Add a sub-module to this. When resolving dependencies it will also search in the sub-modules.
+     * Any `DI` instance can have as many sub-modules as necessary. However beware that each module can only access it own dependencies and its sub-modules.
+     * A sub-module does not has access to its parent dependencies. During dependency resolution, each module always use its own bindings before trying the subModules.
+     * If more than one sub-module has the same binding then the first sub-module attached will be used.
+     * @param di a `DI` instance to be a sub-module
+     * @returns this
+     * 
+     * @example
+     * ```javascript
+     * class A {}
+     * class B {}
+     * class C {
+     *   constructor(a, b) {
+     *     this.a = a;
+     *     this.b = b;
+     *   }
+     * }
+     * 
+     * const di = new DI();
+     * di.bind(A, []);
+     * di.bind(B, []);
+     * di.bind(C, [A, B]);
+     * 
+     * class SubA {}
+     * class SubB {}
+     * const subModule = new DI();
+     * subModule.bind(SubA, []);
+     * subModule.bind(SubB, []);
+     * di.subModule(subModule);
+     * 
+     * // This works fine, getting from di is the same as subModule directly
+     * const subA = di.get(SubA, undefined);
+     * console.log(subA instanceof SubA); // true
+     * const subB = di.get(SubB, undefined);
+     * console.log(subB instanceof SubB); // true
+     * 
+     * // This will fail since subModule does not has access to he parent module
+     * const a = subModule.get(A, undefined);
+     * console.log(a instanceof SubA, a); // false undefined
+     * const b = subModule.get(B, undefined);
+     * console.log(b instanceof B, b); // false undefined
+     * ```
+     */
+    subModule(di: DIGetter): this;
+    /**
+     * Add a sub-module to this. When resolving dependencies it will also search in the sub-modules.
+     * Any `DI` instance can have as many sub-modules as necessary. However beware that each module can only access it own dependencies and its sub-modules.
+     * A sub-module does not has access to its parent dependencies. During dependency resolution, each module always use its own bindings before trying the subModules.
+     * If more than one sub-module has the same binding then the first sub-module attached will be used.
+     * @param modules a spread array of `DI` instances to become sub-modules of this
+     * @returns this
+     * 
+     * @example
+     * ```javascript
+     * class A {}
+     * class B {}
+     * class C {
+     *   constructor(a, b) {
+     *     this.a = a;
+     *     this.b = b;
+     *   }
+     * }
+     * 
+     * const di = new DI();
+     * di.bind(A, []);
+     * di.bind(B, []);
+     * di.bind(C, [A, B]);
+     * 
+     * class SubA {}
+     * class SubB {}
+     * const subModule = new DI();
+     * subModule.bind(SubA, []);
+     * subModule.bind(SubB, []);
+     * di.subModule(subModule);
+     * 
+     * // This works fine, getting from di is the same as subModule directly
+     * const subA = di.get(SubA, undefined);
+     * console.log(subA instanceof SubA); // true
+     * const subB = di.get(SubB, undefined);
+     * console.log(subB instanceof SubB); // true
+     * 
+     * // This will fail since subModule does not has access to he parent module
+     * const a = subModule.get(A, undefined);
+     * console.log(a instanceof SubA, a); // false undefined
+     * const b = subModule.get(B, undefined);
+     * console.log(b instanceof B, b); // false undefined
+     * ```
+     */
+    subModule(...modules: DIGetter[]): this;
 }
 
 export type DIGetter = Pick<DI, 'get' | 'getAll' | 'getResolver'>;

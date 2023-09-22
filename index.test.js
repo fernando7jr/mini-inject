@@ -59,6 +59,8 @@ class A2 {
     }
 }
 
+class D {}
+
 test('Should bind as Singlethon', async (t) => {
     const di = new DI();
     di.bind(A, () => new A(5));
@@ -237,6 +239,20 @@ test('Should throw when binding string using dependencies list', (t) => {
     });
 });
 
+test('Should be able to bind a class without a dependencies list parameter', (t) => {
+    const di = new DI();
+    di.bind(D);
+    const d = di.get(D);
+    t.truthy(d);
+});
+
+test('Should throw when binding string using an undefined dependencies list', (t) => {
+    const di = new DI();
+    t.throws(() => di.bind('C'), {
+        message: 'Array of dependencies requires a constructable injectable',
+    });
+});
+
 test('Should get all dependencies in a single call', async (t) => {
     const di = new DI();
     di.bind(A, () => new A(5));
@@ -333,10 +349,115 @@ test('Should correctly use new or apply depending on the injectable type', async
     di.bind(A, [DI.literal(5)]);
     di.bind(fB, [DI.literal(5)]);
 
-    let [a, b] = di.getAll(A, fB);
+    const [a, b] = di.getAll(A, fB);
 
     t.truthy(a);
     t.truthy(b);
     t.is(a.value, 5);
     t.is(b.value, 10);
+});
+
+test('Should check if a binding exists', async (t) => {
+    const di = new DI();
+    di.bind(A, [DI.literal(5)]);
+
+    t.is(di.has(A), true);
+    t.is(di.has(B), false);
+});
+
+test('Should work with sub-modules', async (t) => {
+    const sub1 = new DI();
+    sub1.bind(A, [DI.literal(5)]);
+    const sub2 = new DI();
+    sub2.bind(B, [DI.literal(5)]);
+
+    const di = new DI();
+    di.bind(C, [A, B]);
+    di.subModule(sub1, sub2);
+
+    const [a, b, c] = di.getAll(A, B, C);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.truthy(c);
+    t.is(a.value, 5);
+    t.is(b.value, 10);
+    t.is(c.value, 15);
+
+    a.value = 20;
+    t.is(di.get(A).value, 20);
+    t.is(sub1.get(A).value, 20);
+
+    t.is(di.has(A), true);
+    t.is(di.has(B), true);
+    t.is(di.has(C), true);
+    t.is(sub1.has(A), true);
+    t.is(sub1.has(B), false);
+    t.is(sub1.has(C), false);
+    t.is(sub2.has(A), false);
+    t.is(sub2.has(B), true);
+    t.is(sub2.has(C), false);
+});
+
+test('Should not be possible for a sub-module access a parent dependency', async (t) => {
+    const sub1 = new DI();
+    sub1.bind(A, [DI.literal(5)]);
+
+    const di = new DI();
+    di.bind(B, [DI.literal(5)]);
+    di.bind(C, [A, B]);
+    di.subModule(sub1);
+
+    const a = sub1.get(A);
+    t.truthy(a);
+    t.is(a.value, 5);
+
+    t.throws(() => sub1.get(B), {
+        message: 'No binding for injectable "B"',
+    });
+});
+
+test('Should not be possible for a sub-module access a dependency from another sub-module with the same parent', async (t) => {
+    const sub1 = new DI();
+    sub1.bind(A, [DI.literal(5)]);
+
+    const sub2 = new DI();
+    sub2.bind(B, [DI.literal(5)]);
+    sub2.bind(C, [A, B]);
+
+    const di = new DI();
+    di.subModule(sub1, sub2);
+
+    t.throws(() => sub2.get(C), {
+        message: 'No binding for injectable "A"',
+    });
+
+    t.throws(() => di.get(C), {
+        message: 'No binding for injectable "A"',
+    });
+});
+
+test('Should a resolved dependency from a sub-module must remain in the sub-module', async (t) => {
+    const sub1 = new DI();
+    sub1.bind(A, [DI.literal(5)]);
+
+    const di = new DI();
+    di.bind(B, [DI.literal(5)]);
+    di.subModule(sub1);
+
+    let a = sub1.get(A);
+    t.truthy(a);
+    t.is(a.value, 5);
+
+    a = di.get(A);
+    t.truthy(a);
+    t.is(a.value, 5);
+
+    a.value = 20;
+    t.is(di.get(A).value, 20);
+    t.is(sub1.get(A).value, 20);
+
+    di.bind(A, [DI.literal(10)]);
+    t.is(di.get(A).value, 10);
+    t.is(sub1.get(A).value, 20);
 });

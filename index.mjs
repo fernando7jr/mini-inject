@@ -59,6 +59,8 @@ export class DI {
     #container = new Map();
     /** @type {Map<string|Symbol, {func: Function, isSingleton: boolean, lateResolve: boolean}>} */
     #bindings = new Map();
+    /** @type {DI[]} */
+    #subModules = [];
 
     #proxy(binding) {
         const getter = () => binding.func(this);
@@ -76,7 +78,13 @@ export class DI {
     getBinding(injectable) {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
-        if (!binding?.func) return;
+        if (!binding?.func) {
+            for (const subModule of this.#subModules) {
+                const subBinding = subModule.getBinding(injectable);
+                if (subBinding) return subBinding;
+            }
+            return undefined;
+        }
         return {
             isSingleton: Boolean(binding.isSingleton),
             lateResolve: Boolean(binding.lateResolve),
@@ -84,11 +92,20 @@ export class DI {
         };
     }
 
+    has(injectable) {
+        return Boolean(this.getBinding(injectable));
+    }
+
     get(injectable, fallbackToValue) {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
 
         if (!binding || !binding.func) {
+            // First we try the subModules
+            for (const subModule of this.#subModules) {
+                if (subModule.has(injectable)) return subModule.get(injectable);
+            }
+
             /* *
              * Fallback is only considered if it was provided as an argument
              * Omitting it means we should throw an error
@@ -97,8 +114,9 @@ export class DI {
             const isFallbackProvided = arguments.length > 1;
             if (isFallbackProvided) return fallbackToValue;
             throw new Error(`No binding for injectable "${key}"`);
-        } else if (!binding.isSingleton) return binding.func(this);
-        else if (!this.#container.has(key)) {
+        } else if (!binding.isSingleton) {
+            return binding.func(this);
+        } else if (!this.#container.has(key)) {
             if (binding.lateResolve) {
                 this.#container.set(key, this.#proxy(binding));
             } else {
@@ -123,7 +141,7 @@ export class DI {
     }
 
     bind(injectable, dep, opts) {
-        const dependencies = Array.isArray(dep) ? dep : null;
+        const dependencies = !dep ? [] : Array.isArray(dep) ? dep : null;
         const dependenciesArrayIsEmpty = dependencies?.length === 0;
         if (dependencies && !injectable?.prototype?.constructor) {
             throw new Error('Array of dependencies requires a constructable injectable');
@@ -153,5 +171,9 @@ export class DI {
             lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
         });
         return this;
+    }
+
+    subModule(...modules) {
+        this.#subModules.push(...modules);
     }
 }
