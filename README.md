@@ -115,7 +115,7 @@ class A2 {
 }
 
 di.bind(A1, [di.literal(5), A2], {lateResolve: true});
-di.bind(A2, [di.literla(2), A1]); // A2 will receive a late resolver for A1
+di.bind(A2, [di.literal(2), A1]); // A2 will receive a late resolver for A1
 
 const a1 = di.get(A1); // Does not cause stack-overflow
 const a2 = di.get(A2); // Does not cause stack-overflow
