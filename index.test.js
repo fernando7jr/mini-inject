@@ -437,7 +437,7 @@ test('Should not be possible for a sub-module access a dependency from another s
     });
 });
 
-test('Should a resolved dependency from a sub-module must remain in the sub-module', async (t) => {
+test('Should ensure that a resolved dependency from a sub-module remains in the sub-module', async (t) => {
     const sub1 = new DI();
     sub1.bind(A, [DI.literal(5)]);
 
@@ -460,4 +460,46 @@ test('Should a resolved dependency from a sub-module must remain in the sub-modu
     di.bind(A, [DI.literal(10)]);
     t.is(di.get(A).value, 10);
     t.is(sub1.get(A).value, 20);
+});
+
+test('Should handle factory dependencies', async (t) => {
+    const di = new DI();
+
+    // Using the class method
+    di.bind(A, [DI.factory(() => 5)]);
+    di.bind(B, [DI.factory(() => 5)]);
+
+    let [a, b] = di.getAll(A, B);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.is(a.value, 5);
+    t.is(b.value, 10);
+
+    // Using the instance method
+    di.bind(A, [DI.factory(() => 7)]);
+    di.bind(B, [DI.factory(() => 7)]);
+
+    [a, b] = di.getAll(A, B);
+
+    t.truthy(a);
+    t.truthy(b);
+    t.is(a.value, 7);
+    t.is(b.value, 14);
+
+    let n = 1;
+    di.bind(A, [di.factory(() => (n++) * 10)]);
+    for (let i = 0; i < 10; i += 1) {
+        const a = di.get(A);
+        t.truthy(a);
+        t.is(a.value, 10);
+    }
+
+    n = 1;
+    di.bind(A, [di.factory(() => (n++) * 10)], {isSingleton: false});
+    for (let i = 0; i < 10; i += 1) {
+        const a = di.get(A);
+        t.truthy(a);
+        t.is(a.value, 10 * (i + 1));
+    }
 });

@@ -149,8 +149,17 @@ class B2 {
     }
 }
 
-di.bind(B1, [di.literal(5), B2]);
+di.bind(B1, [DI.literal(5), B2]);
 di.bind(B2, [di.literal(2), di.literal(di.getResolver(B1))]); // A2 will receive a late resolver for A1
+
+const b1 = di.get(B1); // Does not cause stack-overflow
+const b2 = di.get(B2); // Does not cause stack-overflow
+console.log(b1.value); // 7
+console.log(b2.value); // 3
+
+// You can use factory functions instead of plain literals
+di.bind(B1, [DI.factory(() => 5), B2]);
+di.bind(B2, [di.factory(() => 2), di.factory((_di) => _di.getResolver(B1))]); // A2 will receive a late resolver for A1
 
 const b1 = di.get(B1); // Does not cause stack-overflow
 const b2 = di.get(B2); // Does not cause stack-overflow
@@ -213,6 +222,10 @@ sub2.get(Sub2D); // Sub2D
 ```
 
 ## Changelog
+
+#### 1.8
+
+* Added factory for depencies
 
 #### 1.7
 

@@ -98,9 +98,42 @@ export interface DIResolver<T> {
  * ```
  */
 export class DILiteral<T> {
-    private constructor();
+    private constructor(value: T);
 
     readonly value: T;
+}
+
+/**
+ * A dependecy which is retrieved on demand through a factory function.
+ * This can be used to assign parameters which are not part or have no binding such as primitives (number, boolean, string), plain objects or anyhting that need an instanciation logic that does not fit a DILiteral.
+ * Rather than using this class directly, prefer to use the method `factory`.
+ * @see DI.factory for how to assign literals
+ * @example
+ * ```javascript
+ * class A {
+ *  constructor(n) {
+ *   this.n = `${n} World!`;
+ *  }
+ * }
+ * 
+ * const fn = () => {
+ *  if (process.env.DEV) return 'DEBUG=true; Hello';
+ *  else return 'Hello';
+ * };
+ * 
+ * const di = new DI();
+ * di.bind(A, [DI.factory(fn)]);     // generates (di) => new A('Hello World!') or new A('DEBUG=true; Hello World!') when process.env.DEV is set.
+ * // This also works with the instance
+ * di.bind(A, [di.factory(fn)]);     // generates (di) => new A('Hello World!') or new A('DEBUG=true; Hello World!') when process.env.DEV is set.
+ * 
+ * const a = di.get(A);
+ * console.log(a.n); // Hello World!
+ * ```
+ */
+export class DIFactory<T> {
+    private constructor(fn: (di: DIGetter) => T);
+
+    readonly get(di: DIGetter): T;
 }
 
 /**
@@ -145,6 +178,36 @@ export class DI {
      * ```
      */
     static literal<T>(value: T): DILiteral<T>;
+
+    /**
+     * Create a depedency which is resolved through a `factory` instead of resolving it.
+     * `mini-inject` automatically differentiate `factory` from `injectables` when resolving dependencies.
+     * @param fn any factory method which accepts the DI instance as the first parameter
+     * @returns the `factory` wrapper object
+     * @example
+     * ```javascript
+     * class A {
+     *  constructor(n) {
+     *   this.n = `${n} World!`;
+     *  }
+     * }
+     * 
+     * const fn = () => {
+     *  if (process.env.DEV) return 'DEBUG=true; Hello';
+     *  else return 'Hello';
+     * };
+     * 
+     * const di = new DI();
+     * di.bind(A, [DI.factory(fn)]);     // generates (di) => new A('Hello World!') or new A('DEBUG=true; Hello World!') when process.env.DEV is set.
+     * // This also works with the instance
+     * di.bind(A, [di.factory(fn)]);     // generates (di) => new A('Hello World!') or new A('DEBUG=true; Hello World!') when process.env.DEV is set.
+     * 
+     * const a = di.get(A);
+     * console.log(a.n); // Hello World!
+     * ```
+     */
+    static factory<T>(fn: (di: DIGetter) => T): DIFactory<T>;
+
     /**
      * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
      * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
@@ -179,6 +242,35 @@ export class DI {
      * ```
      */
     literal<T>(value: T): DILiteral<T>;
+
+    /**
+     * Create a depedency which is resolved through a `factory` instead of resolving it.
+     * `mini-inject` automatically differentiate `factory` from `injectables` when resolving dependencies.
+     * @param fn any factory method which accepts the DI instance as the first parameter
+     * @returns the `factory` wrapper object
+     * @example
+     * ```javascript
+     * class A {
+     *  constructor(n) {
+     *   this.n = `${n} World!`;
+     *  }
+     * }
+     * 
+     * const fn = () => {
+     *  if (process.env.DEV) return 'DEBUG=true; Hello';
+     *  else return 'Hello';
+     * };
+     * 
+     * const di = new DI();
+     * di.bind(A, [DI.factory(fn)]);     // generates (di) => new A('Hello World!') or new A('DEBUG=true; Hello World!') when process.env.DEV is set.
+     * // This also works with the instance
+     * di.bind(A, [di.factory(fn)]);     // generates (di) => new A('Hello World!') or new A('DEBUG=true; Hello World!') when process.env.DEV is set.
+     * 
+     * const a = di.get(A);
+     * console.log(a.n); // Hello World!
+     * ```
+     */
+    factory<T>(fn: (di: DIGetter) => T): DIFactory<T>;
 
     /**
      * Get the binding for the injectable if available otherwise return undefined
