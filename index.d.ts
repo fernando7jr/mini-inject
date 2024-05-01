@@ -104,7 +104,7 @@ export class DILiteral<T> {
 }
 
 /**
- * A dependecy which is retrieved on demand through a factory function.
+ * A dependency which is retrieved on demand through a factory function.
  * This can be used to assign parameters which are not part or have no binding such as primitives (number, boolean, string), plain objects or anyhting that need an instanciation logic that does not fit a DILiteral.
  * Rather than using this class directly, prefer to use the method `factory`.
  * @see DI.factory for how to assign literals
