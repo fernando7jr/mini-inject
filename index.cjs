@@ -43,6 +43,7 @@ class DIProxyBuilder {
 }
 
 class DILiteral {
+    /** @type {unknown} */
     #value = undefined;
 
     constructor(value) {
@@ -51,6 +52,20 @@ class DILiteral {
 
     get value() {
         return this.#value;
+    }
+}
+
+class DIFactory {
+    /** @type {(di: DI) => unknown} */
+    #fn = undefined;
+
+    constructor(fn) {
+        this.#fn = fn;
+    }
+
+    /** @param {DI} di */
+    get(di) {
+        return this.#fn(di);
     }
 }
 
@@ -71,8 +86,16 @@ class DI {
         return new DILiteral(value);
     }
 
+    static factory(fn) {
+        return new DIFactory(fn);
+    }
+
     literal(value) {
         return DI.literal(value);
+    }
+
+    factory(fn) {
+        return DI.factory(fn);
     }
 
     getBinding(injectable) {
@@ -153,6 +176,7 @@ class DI {
                 return (di) => {
                     const resolvedDependencies = dependencies.map((d) => {
                         if (d instanceof DILiteral) return d.value;
+                        else if (d instanceof DIFactory) return d.get(di);
                         return di.get(d);
                     });
                     if (!isClass(injectable)) return injectable.apply(injectable, resolvedDependencies);
@@ -178,4 +202,4 @@ class DI {
     }
 }
 
-module.exports = {DI, DILiteral};
+module.exports = {DI, DILiteral, DIFactory};
