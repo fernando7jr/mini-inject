@@ -1,5 +1,5 @@
-const test = require('ava');
-const {DI} = require('./index');
+import test from 'ava';
+import {DI} from './index.mjs';
 
 const idGen = (function* () {
     let i = 0;

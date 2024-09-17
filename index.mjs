@@ -7,11 +7,34 @@ function isClass(f) {
 
 function resolveKey(injectable) {
     if (!injectable) throw new Error(`Could not resolve injectable name from "${injectable}"`);
-    else if (typeof injectable === 'string') return injectable;
+    else if (typeof injectable === 'string' || injectable instanceof Symbol) return injectable;
+    else if (injectable instanceof Token) return injectable.toSymbol();
     else if (injectable.name) return injectable.name;
     else if (injectable.toString && injectable.toString.apply) return injectable.toString();
     else if (injectable.constructor && injectable.constructor.name) return injectable.constructor.name;
     return new String(injectable);
+}
+
+export class Token {
+    #injectable
+    #description;
+
+    static for(injectable, description) {
+        return new Token(injectable, description);
+    }
+
+    constructor(injectable, description) {
+        this.#injectable = injectable;
+        this.#description = resolveKey(description ?? injectable);
+    }
+
+    get value() {
+        return this.#injectable;
+    }
+
+    toSymbol() {
+        return Symbol.for(`__DIToken__[[${this.#description}]]`);
+    }
 }
 
 class DIProxyBuilder {
@@ -90,12 +113,20 @@ export class DI {
         return new DIFactory(fn);
     }
 
+    static token(injectable, description) {
+        return Token.for(injectable, description);
+    }
+
     literal(value) {
         return DI.literal(value);
     }
 
     factory(fn) {
         return DI.factory(fn);
+    }
+
+    token(injectable, description) {
+        return DI.token(injectable, description);
     }
 
     getBinding(injectable) {
@@ -164,6 +195,9 @@ export class DI {
     }
 
     bind(injectable, dep, opts) {
+        const token = injectable;
+        injectable = token instanceof Token ? token.value : injectable;
+
         const dependencies = !dep ? [] : Array.isArray(dep) ? dep : null;
         const dependenciesArrayIsEmpty = dependencies?.length === 0;
         if (dependencies && !injectable?.prototype?.constructor) {
@@ -187,7 +221,7 @@ export class DI {
         })();
 
         const {isSingleton = true, lateResolve = false} = opts || {};
-        const key = resolveKey(injectable);
+        const key = resolveKey(token);
         if (this.#container.has(key)) this.#container.delete(key);
         this.#bindings.set(key, {
             func,

@@ -221,7 +221,73 @@ sub2.bind(A);
 sub2.get(Sub2D); // Sub2D
 ```
 
+### Tokens
+
+The Token is an alternative when the developer wants more control for how the binding keys are generated.
+Instead of a plain string or symbol, Tokens can be used along a *"description"* which specifies how the key should be generated and guarantee more uniqueness.
+
+Suppose we have 2 classes of same name exported by different modules:
+````javascript
+import {C as C1} from './c1';
+import {C as C2} from './c2';
+````
+
+Attempting to bind both directly to a di module will cause conflict since `C1` and `C2` generates the same key `C`:
+````javascript
+const di = new DI();
+di.bind(C1, []);
+di.bind(C2, []);
+
+const [c1, c2] = di.getAll(C1, C2);
+console.log(c1 === c2); // prints "true"
+````
+
+By using tokens we can solve the problem above. A custom description can be passed for each token so a different key is generated:
+````javascript
+const di = new DI();
+const tokenC1 = di.token(C1, 'C1');
+const tokenC2 = di.token(C2, 'C2');
+
+di.bind(C1, []);
+di.bind(C2, []);
+
+const [c1, c2] = di.getAll(tokenC1, tokenC2);
+console.log(c1 === c2); // prints "false"
+
+// But attempting to retrieve them without the token will not work
+// The following will throw an Error
+di.get(C1); // Throws 'No binding for injectable "C1"'
+di.get('C1'); // Throws 'No binding for injectable "C1"'
+di.get(Symbol.for('C1')); // Throws 'No binding for injectable "C1"'
+````
+
+Tokens are still usable even without a custom description:
+````javascript
+class A {}
+class B {}
+
+const di = new DI();
+const tokenA = di.token(A);
+const tokenB = di.token(B);
+
+di.bind(A, []);
+di.bind(B, []);
+
+const [a, b] = di.getAll(tokenA, tokenB);
+console.log(a === b); // prints "false"
+
+// But attempting to retrieve them without the token will not work
+// The following will throw an Error
+di.get(A); // Throws 'No binding for injectable "A"'
+di.get('A'); // Throws 'No binding for injectable "A"'
+di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
+````
+
 ## Changelog
+
+#### 1.9
+
+* Added support for Tokens through `di.token` method
 
 #### 1.8
 
