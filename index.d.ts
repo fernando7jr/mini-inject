@@ -8,7 +8,7 @@ export type BindingFunc<T> = (di: DI) => T;
 /**
  * A Token class for binding injectables
  */
-export class Token<T extends Injectable> {
+export class Token<T> {
     /**
      * static shortcut for the constructor. The description parameter is automatically calculated if not provided.
      * @param injectable any injectable which this token will always reference
@@ -25,7 +25,7 @@ export class Token<T extends Injectable> {
      * console.log(a.value); // prints "5"
      * ````
      */
-    static for<T extends Injectable>(injectable: T): Token<T>;
+    static for<T>(injectable: Injectable<T>): Token<T>;
     /**
      * static shortcut for the constructor. The description parameter is automatically calculated if not provided.
      * @param injectable any injectable which this token will always reference
@@ -46,7 +46,7 @@ export class Token<T extends Injectable> {
      * console.log(v.value); // prints "6"
      * ````
      */
-    static for<T extends Injectable>(injectable: T, description?: string): Token<T>;
+    static for<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
     /**
      * A Token class for binding injectables.
@@ -302,7 +302,7 @@ export class DI {
      * console.log(a.value); // prints "5"
      * ````
      */
-    static token<T extends Injectable>(injectable: T): Token<T>;
+    static token<T>(injectable: Injectable<T>): Token<T>;
     /**
      * Create a Token instance for binding injectables.
      * Tokens are useful for having more control on how injectables are binded.
@@ -324,7 +324,7 @@ export class DI {
      * console.log(v.value); // prints "6"
      * ````
      */
-    static token<T extends Injectable>(injectable: T, description?: string): Token<T>;
+    static token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
     /**
      * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
@@ -406,7 +406,7 @@ export class DI {
      * console.log(a.value); // prints "5"
      * ````
      */
-    token<T extends Injectable>(injectable: T): Token<T>;
+    token<T>(injectable: Injectable<T>): Token<T>;
     /**
      * Create a Token instance for binding injectables.
      * Tokens are useful for having more control on how injectables are binded.
@@ -428,7 +428,7 @@ export class DI {
      * console.log(v.value); // prints "6"
      * ````
      */
-    token<T extends Injectable>(injectable: T, description?: string): Token<T>;
+    token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
     /**
      * Get the binding for the injectable if available otherwise return undefined
@@ -778,4 +778,4 @@ export class DI {
     subModule(...modules: DIGetter[]): this;
 }
 
-export type DIGetter = Pick<DI, 'get' | 'getAll' | 'getResolver'>;
+export type DIGetter = Pick<DI, 'get' | 'getAll' | 'getResolver' | 'getBinding' | 'has'>;
