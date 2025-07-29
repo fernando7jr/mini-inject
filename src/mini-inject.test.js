@@ -552,3 +552,183 @@ test('Should accept tokens for binding', async (t) => {
     t.is(c, 'C');
     t.is(d.value, 'DD');
 });
+
+test('Should clear all containers and bindings', (t) => {
+    const di = new DI();
+    
+    // Add some bindings and get instances
+    di.bind('testService', () => ({ value: 'test' }));
+    di.bind(A, [di.literal(42)]);
+    
+    // Verify bindings exist and containers have content
+    t.true(di.has('testService'));
+    t.true(di.has(A));
+    
+    const instance1 = di.get('testService');
+    const instance2 = di.get(A);
+    t.truthy(instance1);
+    t.truthy(instance2);
+    
+    // Clear the DI container
+    di.clear();
+    
+    // Verify all containers are cleared
+    t.false(di.has('testService'));
+    t.false(di.has(A));
+    
+    // Verify getting non-existent bindings throws errors
+    t.throws(() => di.get('testService'));
+    t.throws(() => di.get(A));
+});
+
+test('Should clear sub-modules recursively', (t) => {
+    const mainDI = new DI();
+    const subDI1 = new DI();
+    const subDI2 = new DI();
+    const nestedSubDI = new DI();
+    
+    // Set up nested sub-modules
+    subDI1.subModule(nestedSubDI);
+    mainDI.subModule(subDI1, subDI2);
+    
+    // Add bindings to each level
+    mainDI.bind('mainService', () => ({ value: 'main' }));
+    subDI1.bind('subService1', () => ({ value: 'sub1' }));
+    subDI2.bind('subService2', () => ({ value: 'sub2' }));
+    nestedSubDI.bind('nestedService', () => ({ value: 'nested' }));
+    
+    // Verify all bindings exist
+    t.true(mainDI.has('mainService'));
+    t.true(mainDI.has('subService1'));
+    t.true(mainDI.has('subService2'));
+    t.true(mainDI.has('nestedService'));
+    t.true(subDI1.has('subService1'));
+    t.true(subDI1.has('nestedService'));
+    t.true(subDI2.has('subService2'));
+    t.true(nestedSubDI.has('nestedService'));
+    
+    // Clear the main DI container
+    mainDI.clear();
+    
+    // Verify main container is cleared
+    t.false(mainDI.has('mainService'));
+    t.false(mainDI.has('subService1'));
+    t.false(mainDI.has('subService2'));
+    t.false(mainDI.has('nestedService'));
+    
+    // Verify sub-modules are also cleared
+    t.false(subDI1.has('subService1'));
+    t.false(subDI1.has('nestedService'));
+    t.false(subDI2.has('subService2'));
+    t.false(nestedSubDI.has('nestedService'));
+});
+
+test('Should clear singleton instances from container', (t) => {
+    const di = new DI();
+    let instanceCount = 0;
+    
+    // Bind a singleton service that tracks instance creation
+    di.bind('counter', () => {
+        instanceCount++;
+        return { count: instanceCount };
+    }, { isSingleton: true });
+    
+    // Get the singleton instance
+    const instance1 = di.get('counter');
+    t.is(instance1.count, 1);
+    t.is(instanceCount, 1);
+    
+    // Get it again to verify it's the same instance
+    const instance2 = di.get('counter');
+    t.is(instance2.count, 1);
+    t.is(instanceCount, 1);
+    t.is(instance1, instance2);
+    
+    // Clear the container
+    di.clear();
+    
+    // Re-bind the same service
+    di.bind('counter', () => {
+        instanceCount++;
+        return { count: instanceCount };
+    }, { isSingleton: true });
+    
+    // Get a new instance after clearing
+    const instance3 = di.get('counter');
+    t.is(instance3.count, 2);
+    t.is(instanceCount, 2);
+    t.not(instance1, instance3);
+});
+
+test('Should clear late-resolved proxies', (t) => {
+    const di = new DI();
+    
+    // Create classes for circular dependency scenario
+    class ServiceA {
+        constructor(serviceB) {
+            this.serviceB = serviceB;
+            this.name = 'A';
+        }
+    }
+    
+    class ServiceB {
+        constructor() {
+            this.name = 'B';
+        }
+        
+        getA() {
+            return di.get(ServiceA);
+        }
+    }
+    
+    // Create circular dependency scenario with late resolve
+    di.bind(ServiceA, [ServiceB], { lateResolve: true });
+    di.bind(ServiceB, () => new ServiceB());
+    
+    // Get the late-resolved service
+    const serviceA = di.get(ServiceA);
+    t.truthy(serviceA);
+    t.is(serviceA.name, 'A');
+    
+    // Verify it's working
+    const serviceB = di.get(ServiceB);
+    t.is(serviceB.name, 'B');
+    
+    // Clear the container
+    di.clear();
+    
+    // Verify the bindings are gone
+    t.false(di.has(ServiceA));
+    t.false(di.has(ServiceB));
+    t.throws(() => di.get(ServiceA));
+    t.throws(() => di.get(ServiceB));
+});
+
+test('Should allow re-binding after clear', (t) => {
+    const di = new DI();
+    
+    // Initial binding
+    di.bind('service', () => ({ version: 1 }));
+    const instance1 = di.get('service');
+    t.is(instance1.version, 1);
+    
+    // Clear and re-bind with different implementation
+    di.clear();
+    di.bind('service', () => ({ version: 2 }));
+    const instance2 = di.get('service');
+    t.is(instance2.version, 2);
+    t.not(instance1, instance2);
+});
+
+test('Should clear empty containers without errors', (t) => {
+    const di = new DI();
+    
+    // Clear an empty container should not throw
+    t.notThrows(() => di.clear());
+    
+    // Should still be able to bind after clearing empty container
+    di.bind('service', () => ({ value: 'test' }));
+    t.true(di.has('service'));
+    const instance = di.get('service');
+    t.is(instance.value, 'test');
+});
