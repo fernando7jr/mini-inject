@@ -167,6 +167,64 @@ console.log(b1.value); // 7
 console.log(b2.value); // 3
 ```
 
+### Clearing DI Containers
+
+The `clear()` method allows you to reset a DI instance by clearing all containers, bindings, and sub-modules. This is particularly useful for testing scenarios or when you need to reconfigure the entire dependency injection container.
+
+```javascript
+const {DI} = require('mini-inject');
+
+class ServiceA {
+    value = 'Service A';
+}
+
+class ServiceB {
+    constructor(serviceA) {
+        this.serviceA = serviceA;
+        this.value = 'Service B';
+    }
+}
+
+const di = new DI();
+const subModule = new DI();
+
+// Set up some bindings
+di.bind(ServiceA, []);
+di.bind(ServiceB, [ServiceA]);
+subModule.bind('subService', () => ({ value: 'Sub Service' }));
+di.subModule(subModule);
+
+// Verify bindings exist
+console.log(di.has(ServiceA));        // true
+console.log(di.has(ServiceB));        // true  
+console.log(di.has('subService'));    // true
+console.log(subModule.has('subService')); // true
+
+// Get instances (singletons will be cached)
+const serviceA = di.get(ServiceA);
+const serviceB = di.get(ServiceB);
+const subService = di.get('subService');
+
+console.log(serviceA.value);    // 'Service A'
+console.log(serviceB.value);    // 'Service B'
+console.log(subService.value);  // 'Sub Service'
+
+// Clear the main DI container (also clears sub-modules recursively)
+di.clear();
+
+// Verify everything is cleared
+console.log(di.has(ServiceA));        // false
+console.log(di.has(ServiceB));        // false
+console.log(di.has('subService'));    // false
+console.log(subModule.has('subService')); // false (sub-modules are also cleared)
+
+// DI can be used normally after clearing
+di.bind('newService', () => ({ value: 'New Service' }));
+console.log(di.has('newService'));    // true
+const newService = di.get('newService');
+console.log(newService.value);        // 'New Service'
+```
+
 ### Sub-Modules
 
 `mini-inject` now supports sub-modules for better managing dependencies. A sub-module is just an instance of `DI` class but is used by the parent module for resolving dependencies when the binding does not exist in the parent module.
@@ -284,6 +342,12 @@ di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 ````
 
 ## Changelog
+
+#### 1.10
+
+* Added the `clear()` method to reset DI containers, bindings, and sub-modules
+* The `clear()` method recursively clears all sub-modules to ensure complete cleanup
+* Useful for testing scenarios and reconfiguring the entire dependency injection container
 
 #### 1.9
 

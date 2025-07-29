@@ -234,6 +234,18 @@ class DI {
     subModule(...modules) {
         this.#subModules.push(...modules);
     }
+
+    clear() {
+        // Clear all sub-modules first
+        for (const subModule of this.#subModules) {
+            subModule.clear();
+        }
+        
+        // Clear current instance containers
+        this.#container.clear();
+        this.#bindings.clear();
+        this.#subModules.length = 0;
+    }
 }
 
 // Export for both CommonJS and ES modules
