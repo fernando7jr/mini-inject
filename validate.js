@@ -6,7 +6,9 @@ console.log('🧪 Validating package for npm publish...\n');
 // Check that built files exist
 const fs = require('fs');
 const requiredFiles = ['index.js', 'index.cjs', 'index.mjs', 'index.d.ts', 'index.d.mts'];
+const requiredTestFiles = ['test/index.test.cjs', 'test/index.test.mjs'];
 const missingFiles = requiredFiles.filter(file => !fs.existsSync(file));
+const missingTestFiles = requiredTestFiles.filter(file => !fs.existsSync(file));
 
 if (missingFiles.length > 0) {
     console.log('❌ Missing required files:', missingFiles.join(', '));
@@ -14,7 +16,14 @@ if (missingFiles.length > 0) {
     process.exit(1);
 }
 
+if (missingTestFiles.length > 0) {
+    console.log('❌ Missing required test files:', missingTestFiles.join(', '));
+    console.log('   Run "npm run build" first');
+    process.exit(1);
+}
+
 console.log('✅ All required files present');
+console.log('✅ All required test files present');
 
 // Validate TypeScript definition files are valid
 try {
@@ -142,5 +151,4 @@ console.log('   - index.d.ts, index.d.mts');
 console.log('   - package.json, README.md, LICENSE');
 
 console.log('\n🚫 Files excluded from npm package:');
-console.log('   - src/, build.js, validate.js, DEVELOPMENT.md');
-console.log('   - *.test.js, *.test.mjs');
+console.log('   - src/, test/, build.js, validate.js, DEVELOPMENT.md');

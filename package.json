@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "node build.js",
-    "clean": "rm -f index.js index.cjs index.mjs index.d.ts index.d.mts",
+    "clean": "rm -f index.js index.cjs index.mjs index.d.ts index.d.mts && rm -rf test",
     "test": "ava",
     "validate": "node validate.js",
     "prepublishOnly": "npm run build && npm run validate && npm test"
@@ -43,6 +43,11 @@
     "url": "https://github.com/fernando7jr/mini-inject/issues"
   },
   "homepage": "https://github.com/fernando7jr/mini-inject#readme",
+  "ava": {
+    "files": [
+      "test/**/*"
+    ]
+  },
   "devDependencies": {
     "ava": "^6.1.3"
   }
