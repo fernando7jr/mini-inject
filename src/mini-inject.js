@@ -236,4 +236,5 @@ class DI {
     }
 }
 
-module.exports = {DI, DILiteral, DIFactory, Token};
+// Export for both CommonJS and ES modules
+export { DI, DILiteral, DIFactory, Token };

@@ -1,1 +1,24 @@
+# Development files - not needed in published package
+src/
+build.js
+validate.js
+DEVELOPMENT.md
 .prettierignore
+
+# Test files - users don't need these
+*.test.js
+*.test.mjs
+
+# Development tools
+.gitignore
+.git/
+
+# Only include the built files:
+# - index.js (CJS wrapper)
+# - index.cjs (CommonJS)
+# - index.mjs (ES modules)
+# - index.d.ts (TypeScript definitions for CJS)
+# - index.d.mts (TypeScript definitions for ESM)
+# - package.json
+# - README.md
+# - LICENSE

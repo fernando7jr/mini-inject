@@ -5,6 +5,15 @@
   "type": "commonjs",
   "main": "index.js",
   "module": "index.mjs",
+  "files": [
+    "index.js",
+    "index.cjs", 
+    "index.mjs",
+    "index.d.ts",
+    "index.d.mts",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": {
       "require": "./index.cjs",
@@ -12,7 +21,11 @@
     }
   },
   "scripts": {
-    "test": "ava"
+    "build": "node build.js",
+    "clean": "rm -f index.js index.cjs index.mjs index.d.ts index.d.mts",
+    "test": "ava",
+    "validate": "node validate.js",
+    "prepublishOnly": "npm run build && npm run validate && npm test"
   },
   "repository": {
     "type": "git",
