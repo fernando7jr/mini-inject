@@ -18,6 +18,7 @@ function resolveKey(injectable) {
 class Token {
     #injectable
     #description;
+    #symbol; // Cache the symbol to avoid recreating it
 
     static for(injectable, description) {
         return new Token(injectable, description);
@@ -26,6 +27,8 @@ class Token {
     constructor(injectable, description) {
         this.#injectable = injectable;
         this.#description = resolveKey(description ?? injectable);
+        // Use regular Symbol instead of Symbol.for to avoid global registry
+        this.#symbol = Symbol(`__DIToken__[[${this.#description}]]`);
     }
 
     get value() {
@@ -33,7 +36,7 @@ class Token {
     }
 
     toSymbol() {
-        return Symbol.for(`__DIToken__[[${this.#description}]]`);
+        return this.#symbol;
     }
 }
 
@@ -61,7 +64,14 @@ class DIProxyBuilder {
                 return getInstance()[p];
             },
         };
-        return new Proxy(this, handler);
+        // Use an empty object instead of 'this' to avoid circular references
+        return new Proxy({}, handler);
+    }
+
+    dispose() {
+        this.#getter = null;
+        this.#__instance = null;
+        this.#hasInstance = false;
     }
 }
 
@@ -233,6 +243,15 @@ class DI {
 
     subModule(...modules) {
         this.#subModules.push(...modules);
+        return this;
+    }
+
+    removeSubModule(module) {
+        const index = this.#subModules.indexOf(module);
+        if (index > -1) {
+            this.#subModules.splice(index, 1);
+        }
+        return this;
     }
 
     clear() {
