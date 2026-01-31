@@ -75,6 +75,119 @@ class DIProxyBuilder {
     }
 }
 
+// Experimental resolution strategy that creates a more debug-friendly wrapper
+// The wrapper has the correct prototype and class information
+// making it easier for debugging tools like Sentry to identify the real class
+class DIExperimentalWrapper {
+    #hasInstance = false;
+    #__instance;
+    /** @type {() => any} */
+    #getter = null;
+    #targetConstructor = null;
+    
+    constructor(getter, targetConstructor) {
+        this.#getter = getter;
+        this.#targetConstructor = targetConstructor;
+    }
+
+    #getInstance() {
+        if (!this.#hasInstance) {
+            this.#__instance = this.#getter();
+            this.#hasInstance = true;
+        }
+        return this.#__instance;
+    }
+
+    // Create a wrapper that's more transparent for debugging
+    // The wrapper object has the correct prototype and metadata
+    build() {
+        const self = this;
+        
+        // Create a target object with the correct prototype
+        // This allows instanceof checks and helps debuggers identify the class
+        const target = this.#targetConstructor && this.#targetConstructor.prototype
+            ? Object.create(this.#targetConstructor.prototype)
+            : {};
+        
+        // Add metadata to help debugging tools
+        if (this.#targetConstructor) {
+            // Store the constructor reference (non-configurable to prevent changes)
+            Object.defineProperty(target, 'constructor', {
+                enumerable: false,
+                configurable: false,
+                writable: false,
+                value: this.#targetConstructor
+            });
+            
+            // Add a Symbol.toStringTag for better toString() output
+            if (this.#targetConstructor.name) {
+                Object.defineProperty(target, Symbol.toStringTag, {
+                    enumerable: false,
+                    configurable: true,
+                    get() {
+                        return self.#targetConstructor.name;
+                    }
+                });
+            }
+        }
+        
+        // Use Proxy to forward property access to the real instance
+        // But now the target has the correct prototype, making it more transparent
+        return new Proxy(target, {
+            get(targetObj, prop) {
+                // Special case for 'constructor' - return the stored value
+                if (prop === 'constructor') {
+                    return targetObj.constructor;
+                }
+                
+                // Get the real instance
+                const instance = self.#getInstance();
+                
+                // Return the property from the instance
+                const value = instance[prop];
+                
+                // If it's a function, bind it to the real instance
+                if (typeof value === 'function') {
+                    return value.bind(instance);
+                }
+                
+                return value;
+            },
+            set(targetObj, prop, value) {
+                const instance = self.#getInstance();
+                instance[prop] = value;
+                return true;
+            },
+            has(targetObj, prop) {
+                if (prop === 'constructor') return true;
+                const instance = self.#getInstance();
+                return prop in instance;
+            },
+            ownKeys(targetObj) {
+                const instance = self.#getInstance();
+                return Reflect.ownKeys(instance);
+            },
+            getOwnPropertyDescriptor(targetObj, prop) {
+                if (prop === 'constructor') {
+                    return Object.getOwnPropertyDescriptor(targetObj, 'constructor');
+                }
+                const instance = self.#getInstance();
+                return Object.getOwnPropertyDescriptor(instance, prop);
+            },
+            getPrototypeOf(targetObj) {
+                const instance = self.#getInstance();
+                return Object.getPrototypeOf(instance);
+            }
+        });
+    }
+
+    dispose() {
+        this.#getter = null;
+        this.#__instance = null;
+        this.#hasInstance = false;
+    }
+}
+
 class DILiteral {
     /** @type {unknown} */
     #value = undefined;
@@ -105,7 +218,7 @@ class DIFactory {
 class DI {
     /** @type {Map<string|Symbol, any>} */
     #container = new Map();
-    /** @type {Map<string|Symbol, {func: Function, isSingleton: boolean, lateResolve: boolean}>} */
+    /** @type {Map<string|Symbol, {func: Function, isSingleton: boolean, lateResolve: boolean, experimentalResolution: boolean, injectable: any}>} */
     #bindings = new Map();
     /** @type {DI[]} */
     #subModules = [];
@@ -113,6 +226,13 @@ class DI {
     #proxy(binding) {
         const getter = () => binding.func(this);
         return new DIProxyBuilder(getter).build();
+    }
+
+    #experimentalWrapper(binding) {
+        const getter = () => binding.func(this);
+        // Pass the injectable constructor for better debugging
+        const targetConstructor = binding.injectable;
+        return new DIExperimentalWrapper(getter, targetConstructor).build();
     }
 
     static literal(value) {
@@ -152,6 +272,7 @@ class DI {
         return {
             isSingleton: Boolean(binding.isSingleton),
             lateResolve: Boolean(binding.lateResolve),
+            experimentalResolution: Boolean(binding.experimentalResolution),
             resolveFunction: binding.func,
         };
     }
@@ -182,7 +303,12 @@ class DI {
             return binding.func(this);
         } else if (!this.#container.has(key)) {
             if (binding.lateResolve) {
-                this.#container.set(key, this.#proxy(binding));
+                // Use experimental resolution if enabled, otherwise use Proxy
+                if (binding.experimentalResolution) {
+                    this.#container.set(key, this.#experimentalWrapper(binding));
+                } else {
+                    this.#container.set(key, this.#proxy(binding));
+                }
             } else {
                 const instance = binding.func(this);
                 this.#container.set(key, instance);
@@ -230,13 +356,15 @@ class DI {
             return dep;
         })();
 
-        const {isSingleton = true, lateResolve = false} = opts || {};
+        const {isSingleton = true, lateResolve = false, experimentalResolution = false} = opts || {};
         const key = resolveKey(token);
         if (this.#container.has(key)) this.#container.delete(key);
         this.#bindings.set(key, {
             func,
             isSingleton,
             lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
+            experimentalResolution: lateResolve ? experimentalResolution : false, // Only valid when lateResolve is true
+            injectable: token instanceof Token ? token.value : token, // Store the original injectable for debugging
         });
         return this;
     }

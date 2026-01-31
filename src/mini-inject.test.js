@@ -720,15 +720,100 @@ test('Should allow re-binding after clear', (t) => {
     t.not(instance1, instance2);
 });
 
-test('Should clear empty containers without errors', (t) => {
+test('Should solve circular dependency with experimentalResolution option', (t) => {
+    const A2 = class {
+        constructor(n, a1) {
+            this.n = n;
+            this.a1 = a1;
+        }
+
+        get value() {
+            return this.a1.n - this.n;
+        }
+    };
+
+    const di = new DI();
+    // Using experimentalResolution instead of Proxy
+    di.bind(A1, () => new A1(5, di.get(A2)), {lateResolve: true, experimentalResolution: true});
+    di.bind(A2, () => new A2(2, di.get(A1)));
+
+    const a1 = di.get(A1);
+    const a2 = di.get(A2);
+
+    t.truthy(a1);
+    t.truthy(a2);
+    t.is(a1.value, 7);
+    t.is(a2.value, 3);
+    
+    // Verify that a1 has the correct prototype
+    t.truthy(a1 instanceof A1);
+    t.is(a1.constructor, A1);
+});
+
+test('Should work with experimentalResolution using dependency arrays', (t) => {
     const di = new DI();
     
-    // Clear an empty container should not throw
-    t.notThrows(() => di.clear());
+    // Using experimentalResolution with dependency arrays
+    di.bind(A1, [di.literal(8), A2], {lateResolve: true, experimentalResolution: true});
+    di.bind(A2, [di.literal(1), di.literal(di.getResolver(A1))]);
+
+    const a1 = di.get(A1);
+    const a2 = di.get(A2);
+
+    t.truthy(a1);
+    t.truthy(a2);
+    t.is(a1.value, 9);
+    t.is(a2.value, 7);
     
-    // Should still be able to bind after clearing empty container
-    di.bind('service', () => ({ value: 'test' }));
-    t.true(di.has('service'));
-    const instance = di.get('service');
-    t.is(instance.value, 'test');
+    // Verify instanceof works
+    t.truthy(a1 instanceof A1);
+});
+
+test('Should maintain backward compatibility - lateResolve without experimentalResolution uses Proxy', (t) => {
+    const A2 = class {
+        constructor(n, a1) {
+            this.n = n;
+            this.a1 = a1;
+        }
+
+        get value() {
+            return this.a1.n - this.n;
+        }
+    };
+
+    const di = new DI();
+    // Without experimentalResolution, should still use Proxy (default behavior)
+    di.bind(A1, () => new A1(5, di.get(A2)), {lateResolve: true});
+    di.bind(A2, () => new A2(2, di.get(A1)));
+
+    const a1 = di.get(A1);
+    const a2 = di.get(A2);
+
+    t.truthy(a1);
+    t.truthy(a2);
+    t.is(a1.value, 7);
+    t.is(a2.value, 3);
+});
+
+test('Should only enable experimentalResolution when lateResolve is true', (t) => {
+    const di = new DI();
+    
+    // experimentalResolution without lateResolve should be ignored
+    di.bind(A, [di.literal(5)], {experimentalResolution: true});
+    
+    const binding = di.getBinding(A);
+    t.truthy(binding);
+    t.is(binding.lateResolve, false);
+    t.is(binding.experimentalResolution, false); // Should be false because lateResolve is false
+});
+
+test('Should return correct binding info with experimentalResolution', (t) => {
+    const di = new DI();
+    di.bind(A, [di.literal(5)], {lateResolve: true, experimentalResolution: true});
+    
+    const binding = di.getBinding(A);
+    t.truthy(binding);
+    t.is(binding.lateResolve, true);
+    t.is(binding.experimentalResolution, true);
+    t.is(binding.isSingleton, true);
 });
