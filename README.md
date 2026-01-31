@@ -443,7 +443,7 @@ di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 
 ## Changelog
 
-#### 1.11
+#### Next Release
 
 * Added `experimentalResolution` option for circular dependencies
 * The new option provides a more debug-friendly alternative to the Proxy-based approach

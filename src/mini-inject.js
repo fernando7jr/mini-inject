@@ -175,8 +175,8 @@ class DIExperimentalWrapper {
                 return Object.getOwnPropertyDescriptor(instance, prop);
             },
             getPrototypeOf(targetObj) {
-                const instance = self.#getInstance();
-                return Object.getPrototypeOf(instance);
+                // Return the target's prototype to maintain consistency
+                return Object.getPrototypeOf(targetObj);
             }
         });
     }

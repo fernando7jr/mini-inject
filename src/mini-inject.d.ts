@@ -774,7 +774,7 @@ export class DI {
    * Passing a non constructable class or function along an array of dependencies will throw an error. Tokens are acceptable though
    *
    * @param injectable an injectable class used for the binding. Must be a constructable class or function
-   * @param dependencies array of dependencies to be used when instanciating the injectable. The most be specified at the same order that the constructor parameters
+   * @param dependencies array of dependencies to be used when instantiating the injectable. They must be specified in the same order as the constructor parameters
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
    * @param opts.lateResolve optional param to specify that this injectable should be resolved later. This means that instanciation will happen later when it is used. This avoids circular dependency problems. It is false by default
    * @param opts.experimentalResolution optional param to enable experimental resolution strategy for circular dependencies. Only works when lateResolve is true. Uses a more debug-friendly wrapper instead of Proxy. It is false by default
@@ -810,7 +810,7 @@ export class DI {
   /**
    * Bind a class or another constructable object so it can be fetched later
    * @param injectable an injectable class or a string key-value used for the binding
-   * @param func the function called when it should instanciate the object
+   * @param func the function called when it should instantiate the object
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
    * @param opts.lateResolve optional param to specify that this injectable should be resolved later. This means that instanciation will happen later when it is used. This avoids circular dependency problems. It is false by default
    * @param opts.experimentalResolution optional param to enable experimental resolution strategy for circular dependencies. Only works when lateResolve is true. Uses a more debug-friendly wrapper instead of Proxy. It is false by default
