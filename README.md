@@ -123,6 +123,42 @@ console.log(a1.value); // 7
 console.log(a2.value); // 3
 
 
+/// Solved through lateResolve with experimentalResolution option
+/// This approach is more debug-friendly and works better with error tracking tools like Sentry
+class C1 {
+    constructor(n, c2) {
+        this.n = n;
+        this.c2 = c2;
+    }
+
+    get value() {
+        return this.n + this.c2.n;
+    }
+}
+
+class C2 {
+    constructor(n, c1) {
+        this.n = n;
+        this.c1 = c1; // c1 uses experimental resolution - better for debugging
+    }
+
+    get value() {
+        return this.c1.n - this.n;
+    }
+}
+
+// Using experimentalResolution option for better debugging support
+di.bind(C1, [di.literal(5), C2], {lateResolve: true, experimentalResolution: true});
+di.bind(C2, [di.literal(2), C1]); // C2 will receive a late resolver for C1
+
+const c1 = di.get(C1); // Does not cause stack-overflow
+const c2 = di.get(C2); // Does not cause stack-overflow
+console.log(c1.value); // 7
+console.log(c2.value); // 3
+console.log(c1 instanceof C1); // true - instanceof works correctly
+console.log(c1.constructor.name); // "C1" - debugging tools can see the real class
+
+
 /// Solved through getResolver
 class B1 {
     constructor(n, b2) {
@@ -166,6 +202,70 @@ const b2 = di.get(B2); // Does not cause stack-overflow
 console.log(b1.value); // 7
 console.log(b2.value); // 3
 ```
+
+### Experimental Resolution for Circular Dependencies
+
+The `experimentalResolution` option provides an alternative approach to solving circular dependencies that is more compatible with debugging and error tracking tools like Sentry.
+
+**Why use experimentalResolution?**
+
+The default `lateResolve` approach uses JavaScript Proxies to delay instance creation. While this works well for most cases, it can cause issues with some debugging tools that cannot properly inspect Proxy objects to determine the underlying class type. This can make error tracking and debugging more difficult.
+
+The `experimentalResolution` option addresses this by creating wrapper objects with the correct prototype chain and class metadata, making them more transparent to debugging tools while still solving circular dependency problems.
+
+**How to use it:**
+
+Simply add `experimentalResolution: true` alongside `lateResolve: true` in your binding options:
+
+```javascript
+const {DI} = require('mini-inject');
+
+class ServiceA {
+    constructor(serviceB) {
+        this.serviceB = serviceB;
+    }
+    
+    getName() {
+        return 'ServiceA using ' + this.serviceB.getName();
+    }
+}
+
+class ServiceB {
+    constructor(serviceA) {
+        this.serviceA = serviceA;
+    }
+    
+    getName() {
+        return 'ServiceB';
+    }
+}
+
+const di = new DI();
+
+// Use experimental resolution for better debugging
+di.bind(ServiceA, [ServiceB], {lateResolve: true, experimentalResolution: true});
+di.bind(ServiceB, [ServiceA]);
+
+const serviceA = di.get(ServiceA);
+console.log(serviceA.getName()); // Works correctly
+console.log(serviceA instanceof ServiceA); // true - instanceof works
+console.log(serviceA.constructor.name); // "ServiceA" - class name is visible
+```
+
+**Key differences:**
+
+- **Default `lateResolve`**: Uses JavaScript Proxy. Simple and transparent, but can be opaque to debugging tools.
+- **`experimentalResolution`**: Creates a wrapper with correct prototype and metadata. Better for debugging tools, error tracking, and inspecting objects.
+
+**When to use each:**
+
+- Use default `lateResolve` (without `experimentalResolution`) for most cases - it's simpler and well-tested.
+- Use `experimentalResolution: true` when:
+  - You're using error tracking tools like Sentry
+  - You need better debugging capabilities in production
+  - You want instanceof checks and constructor inspection to work more reliably
+
+**Note:** `experimentalResolution` only takes effect when `lateResolve: true` is also set. Setting `experimentalResolution: true` without `lateResolve: true` has no effect.
 
 ### Clearing DI Containers
 
@@ -342,6 +442,14 @@ di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 ````
 
 ## Changelog
+
+#### 1.11
+
+* Added `experimentalResolution` option for circular dependencies
+* The new option provides a more debug-friendly alternative to the Proxy-based approach
+* Better compatibility with error tracking tools like Sentry
+* The wrapper objects maintain correct prototype chains and class metadata
+* Fully backward compatible - existing code continues to work without changes
 
 #### 1.10
 

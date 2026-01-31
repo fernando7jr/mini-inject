@@ -445,7 +445,7 @@ export class DI {
   getBinding<T>(
     injectable: InjectableOrToken<T>
   ):
-    | { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T }
+    | { isSingleton: boolean; lateResolve: boolean; experimentalResolution: boolean; resolveFunction: () => T }
     | undefined;
 
   /**
@@ -777,6 +777,7 @@ export class DI {
    * @param dependencies array of dependencies to be used when instanciating the injectable. The most be specified at the same order that the constructor parameters
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
    * @param opts.lateResolve optional param to specify that this injectable should be resolved later. This means that instanciation will happen later when it is used. This avoids circular dependency problems. It is false by default
+   * @param opts.experimentalResolution optional param to enable experimental resolution strategy for circular dependencies. Only works when lateResolve is true. Uses a more debug-friendly wrapper instead of Proxy. It is false by default
    * @returns this
    *
    * @example
@@ -794,13 +795,17 @@ export class DI {
    * di.bind(A, []);     // generates (di) => new A()
    * di.bind(B, []);     // generates (di) => new B()
    * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+   * 
+   * // Using experimentalResolution for circular dependencies
+   * di.bind(A1, [di.literal(5), A2], {lateResolve: true, experimentalResolution: true});
+   * di.bind(A2, [di.literal(2), A1]);
    * ```
    *
    */
   bind<T>(
     injectable: ClassConstructor<T> | Token<T>,
     dependencies: Dependency[],
-    opts?: { isSingleton?: boolean; lateResolve?: boolean }
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; experimentalResolution?: boolean }
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -808,6 +813,7 @@ export class DI {
    * @param func the function called when it should instanciate the object
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
    * @param opts.lateResolve optional param to specify that this injectable should be resolved later. This means that instanciation will happen later when it is used. This avoids circular dependency problems. It is false by default
+   * @param opts.experimentalResolution optional param to enable experimental resolution strategy for circular dependencies. Only works when lateResolve is true. Uses a more debug-friendly wrapper instead of Proxy. It is false by default
    * @returns this
    *
    * @example
@@ -831,7 +837,7 @@ export class DI {
   bind<T>(
     injectable: InjectableOrToken<T>,
     func: BindingFunc<T>,
-    opts?: { isSingleton?: boolean; lateResolve?: boolean }
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; experimentalResolution?: boolean }
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
