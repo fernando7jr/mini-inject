@@ -443,7 +443,7 @@ export class DI {
    * @returns the binding if available otherwise undefined
    */
   getBinding<T>(
-    injectable: InjectableOrToken<T>
+    injectable: InjectableOrToken<T>,
   ):
     | { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T }
     | undefined;
@@ -586,180 +586,172 @@ export class DI {
    * ```
    *
    */
-  getAll<T1>(...injectables: [InjectableOrToken<T1>]): [T1];
+  getAll<T1>(injectable1: InjectableOrToken<T1>): [T1];
   getAll<T1, T2>(
-    ...injectables: [InjectableOrToken<T1>, InjectableOrToken<T2>]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
   ): [T1, T2];
   getAll<T1, T2, T3>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
   ): [T1, T2, T3];
   getAll<T1, T2, T3, T4>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
   ): [T1, T2, T3, T4];
   getAll<T1, T2, T3, T4, T5>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
   ): [T1, T2, T3, T4, T5];
   getAll<T1, T2, T3, T4, T5, T6>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
   ): [T1, T2, T3, T4, T5, T6];
   getAll<T1, T2, T3, T4, T5, T6, T7>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
   ): [T1, T2, T3, T4, T5, T6, T7];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8, T9];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>,
-      InjectableOrToken<T10>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
+    injectable10: InjectableOrToken<T10>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>,
-      InjectableOrToken<T10>,
-      InjectableOrToken<T11>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
+    injectable10: InjectableOrToken<T10>,
+    injectable11: InjectableOrToken<T11>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>,
-      InjectableOrToken<T10>,
-      InjectableOrToken<T11>,
-      InjectableOrToken<T12>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
+    injectable10: InjectableOrToken<T10>,
+    injectable11: InjectableOrToken<T11>,
+    injectable12: InjectableOrToken<T12>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>,
-      InjectableOrToken<T10>,
-      InjectableOrToken<T11>,
-      InjectableOrToken<T12>,
-      InjectableOrToken<T13>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
+    injectable10: InjectableOrToken<T10>,
+    injectable11: InjectableOrToken<T11>,
+    injectable12: InjectableOrToken<T12>,
+    injectable13: InjectableOrToken<T13>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>,
-      InjectableOrToken<T10>,
-      InjectableOrToken<T11>,
-      InjectableOrToken<T12>,
-      InjectableOrToken<T13>,
-      InjectableOrToken<T14>
-    ]
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
+    injectable10: InjectableOrToken<T10>,
+    injectable11: InjectableOrToken<T11>,
+    injectable12: InjectableOrToken<T12>,
+    injectable13: InjectableOrToken<T13>,
+    injectable14: InjectableOrToken<T14>,
   ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(
-    ...injectables: [
-      InjectableOrToken<T1>,
-      InjectableOrToken<T2>,
-      InjectableOrToken<T3>,
-      InjectableOrToken<T4>,
-      InjectableOrToken<T5>,
-      InjectableOrToken<T6>,
-      InjectableOrToken<T7>,
-      InjectableOrToken<T8>,
-      InjectableOrToken<T9>,
-      InjectableOrToken<T10>,
-      InjectableOrToken<T11>,
-      InjectableOrToken<T12>,
-      InjectableOrToken<T13>,
-      InjectableOrToken<T14>,
-      InjectableOrToken<T15>
-    ]
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15];
-  getAll(...injectables: InjectableOrToken<any>[]): unknown[];
+    injectable1: InjectableOrToken<T1>,
+    injectable2: InjectableOrToken<T2>,
+    injectable3: InjectableOrToken<T3>,
+    injectable4: InjectableOrToken<T4>,
+    injectable5: InjectableOrToken<T5>,
+    injectable6: InjectableOrToken<T6>,
+    injectable7: InjectableOrToken<T7>,
+    injectable8: InjectableOrToken<T8>,
+    injectable9: InjectableOrToken<T9>,
+    injectable10: InjectableOrToken<T10>,
+    injectable11: InjectableOrToken<T11>,
+    injectable12: InjectableOrToken<T12>,
+    injectable13: InjectableOrToken<T13>,
+    injectable14: InjectableOrToken<T14>,
+    injectable15: InjectableOrToken<T15>,
+    ...injectables: InjectableOrToken<any>[]
+  ): [
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    ...unknown[],
+  ];
 
   /**
    * Get an object with a method to get an instance of the class binding
@@ -800,7 +792,7 @@ export class DI {
   bind<T>(
     injectable: ClassConstructor<T> | Token<T>,
     dependencies: Dependency[],
-    opts?: { isSingleton?: boolean; lateResolve?: boolean }
+    opts?: { isSingleton?: boolean; lateResolve?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -831,7 +823,7 @@ export class DI {
   bind<T>(
     injectable: InjectableOrToken<T>,
     func: BindingFunc<T>,
-    opts?: { isSingleton?: boolean; lateResolve?: boolean }
+    opts?: { isSingleton?: boolean; lateResolve?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later

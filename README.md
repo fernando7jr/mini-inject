@@ -343,6 +343,12 @@ di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 
 ## Changelog
 
+#### 1.10.1
+
+* Improved `getAll` method signatures to use named parameters instead of tuple types
+* Fixed TypeScript compatibility with the latest TypeScript versions
+* Better type inference for `getAll` calls with 15+ parameters using spread syntax
+
 #### 1.10
 
 * Added the `clear()` method to reset DI containers, bindings, and sub-modules
