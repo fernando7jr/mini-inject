@@ -203,28 +203,81 @@ function detectCycles(nodes, edges) {
         const neighbors = adj.get(edge.from);
         if (neighbors) neighbors.push(edge.to);
     }
-    const visited = new Set();
-    const cycles = [];
-    function dfs(key, path, inStack) {
-        if (inStack.has(key)) {
-            const start = path.indexOf(key);
-            cycles.push([...path.slice(start), key]);
-            return;
+
+    // Tarjan's SCC — correctly identifies all strongly-connected components
+    // regardless of traversal order, avoiding the missed-cycle bug of simple DFS.
+    const nodeIndex = new Map();
+    const lowlink = new Map();
+    const onStack = new Set();
+    const stack = [];
+    let counter = 0;
+    const sccOf = new Map(); // key → scc array (only for non-trivial SCCs)
+    const nonTrivialSccs = [];
+
+    const strongconnect = (v) => {
+        nodeIndex.set(v, counter);
+        lowlink.set(v, counter);
+        counter++;
+        stack.push(v);
+        onStack.add(v);
+        for (const w of adj.get(v) || []) {
+            if (!nodeIndex.has(w)) {
+                strongconnect(w);
+                lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
+            } else if (onStack.has(w)) {
+                lowlink.set(v, Math.min(lowlink.get(v), nodeIndex.get(w)));
+            }
         }
-        if (visited.has(key)) return;
-        inStack.add(key);
-        path.push(key);
-        for (const neighbor of adj.get(key) || []) {
-            dfs(neighbor, path, inStack);
+        if (lowlink.get(v) === nodeIndex.get(v)) {
+            const scc = [];
+            let w;
+            do {
+                w = stack.pop();
+                onStack.delete(w);
+                scc.push(w);
+            } while (w !== v);
+            const hasSelfLoop = (adj.get(v) || []).includes(v);
+            if (scc.length > 1 || hasSelfLoop) {
+                scc.reverse(); // restore discovery order (stack pops in reverse)
+                nonTrivialSccs.push(scc);
+                for (const key of scc) sccOf.set(key, scc);
+            }
         }
-        path.pop();
-        inStack.delete(key);
-        visited.add(key);
-    }
+    };
+
     for (const node of nodes) {
-        if (!visited.has(node.key)) dfs(node.key, [], new Set());
+        if (!nodeIndex.has(node.key)) strongconnect(node.key);
     }
-    return cycles;
+
+    // For each non-trivial SCC, extract one representative cycle path (start key repeated at end)
+    const cycles = [];
+    for (const scc of nonTrivialSccs) {
+        const sccSet = new Set(scc);
+        const sccAdj = new Map();
+        for (const v of scc) {
+            sccAdj.set(v, (adj.get(v) || []).filter((w) => sccSet.has(w)));
+        }
+        const start = scc[0];
+        const path = [];
+        const visited = new Set();
+        const findCycle = (v) => {
+            if (v === start && path.length > 0) {
+                cycles.push([...path, start]);
+                return true;
+            }
+            if (visited.has(v)) return false;
+            visited.add(v);
+            path.push(v);
+            for (const w of sccAdj.get(v) || []) {
+                if (findCycle(w)) return true;
+            }
+            path.pop();
+            return false;
+        };
+        findCycle(start);
+    }
+
+    return {cycles, sccOf};
 }
 
 /**
@@ -547,7 +600,7 @@ class DI {
             for (const dep of node.deps) {
                 if (dep.type !== 'injectable') continue;
                 if (!nodeKeySet.has(dep.key)) continue;
-                const edgeKey = `${node.key}→${dep.key}`;
+                const edgeKey = JSON.stringify([node.key, dep.key]);
                 if (edgeSeen.has(edgeKey)) continue;
                 edgeSeen.add(edgeKey);
                 edges.push({from: node.key, to: dep.key, isCircular: false});
@@ -555,13 +608,11 @@ class DI {
         }
 
         // Detect cycles then mark affected edges
-        const cycles = detectCycles(nodes, edges);
+        // An edge is circular iff both endpoints belong to the same non-trivial SCC.
+        const {cycles, sccOf} = detectCycles(nodes, edges);
         for (const edge of edges) {
-            edge.isCircular = cycles.some((cycle) =>
-                cycle.some(
-                    (k, i) => i < cycle.length - 1 && k === edge.from && cycle[i + 1] === edge.to,
-                ),
-            );
+            const fromScc = sccOf.get(edge.from);
+            edge.isCircular = fromScc !== undefined && fromScc === sccOf.get(edge.to);
         }
 
         return {nodes, edges, cycles};
