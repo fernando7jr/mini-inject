@@ -1153,6 +1153,148 @@ test('eager bind with factory function', (t) => {
     t.is(val.done, true);
 });
 
+// ─── fork ─────────────────────────────────────────────────────────────────────
+
+test('fork: parent bindings are visible in the fork', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(10)]);
+
+    const child = parent.fork();
+    const a = child.get(A);
+    t.truthy(a);
+    t.is(a.value, 10);
+});
+
+test('fork: parent singleton is reused in the fork (shared cache)', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(99)]);
+
+    const parentA = parent.get(A);
+    const child = parent.fork();
+    const childA = child.get(A);
+
+    t.is(parentA, childA); // same instance
+});
+
+test('fork: fork-local binding overrides parent for the fork only', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(1)]);
+
+    const child = parent.fork();
+    child.bind(A, [child.literal(42)]);
+
+    t.is(child.get(A).value, 42);  // fork's own
+    t.is(parent.get(A).value, 1);  // parent unchanged
+});
+
+test('fork: fork-local binding does not affect parent', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(1)]);
+
+    const child = parent.fork();
+    child.bind(B, [child.literal(5)]);
+
+    t.true(child.has(B));
+    t.false(parent.has(B)); // parent knows nothing about B
+});
+
+test('fork: factory in fork receives fork as di, can resolve parent bindings', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(5)]);
+
+    const child = parent.fork();
+    child.bind(C, (di) => new C(di.get(A), new B(2)));
+
+    const c = child.get(C);
+    t.is(c.a.value, 5);   // A resolved from parent through fork
+    t.is(c.b.value, 4);   // B(2) → value = 2 * 2 = 4
+});
+
+test('fork: clear() on fork does not affect parent', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(7)]);
+    const parentA = parent.get(A); // cache it
+
+    const child = parent.fork();
+    child.bind(B, [child.literal(3)]);
+    child.get(B);
+
+    child.clear();
+
+    t.false(child.has(B));           // fork-local binding gone
+    t.true(parent.has(A));           // parent unaffected
+    t.is(parent.get(A), parentA);   // parent singleton still intact
+});
+
+test('fork: clear() on fork, fork can still delegate to parent after clear', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(3)]);
+
+    const child = parent.fork();
+    child.bind(B, [child.literal(1)]);
+    child.clear();
+
+    // After clear, fork still knows its parent
+    const a = child.get(A);
+    t.is(a.value, 3);
+});
+
+test('fork: has() returns true for parent bindings', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(1)]);
+
+    const child = parent.fork();
+    t.true(child.has(A));
+});
+
+test('fork: fallback works when neither fork nor parent have a binding', (t) => {
+    const parent = new DI();
+    const child = parent.fork();
+
+    const result = child.get(D, 'fallback');
+    t.is(result, 'fallback');
+});
+
+test('fork: fork of a fork (multi-level scoping)', (t) => {
+    const root = new DI();
+    root.bind(A, [root.literal(1)]);
+
+    const mid = root.fork();
+    mid.bind(B, [mid.literal(2)]);
+
+    const leaf = mid.fork();
+    leaf.bind(C, (di) => new C(di.get(A), di.get(B)));
+
+    const c = leaf.get(C);
+    t.is(c.a.value, 1); // from root
+    t.is(c.b.value, 4); // from mid: B(2) → value = 2*2 = 4
+});
+
+test('fork: dispose is called on fork-local singletons only on clear', (t) => {
+    const disposedLog = [];
+    class Resource {
+        constructor(name) {
+            this.name = name;
+        }
+        dispose() {
+            disposedLog.push(this.name);
+        }
+    }
+
+    const parent = new DI();
+    parent.bind('root-res', () => new Resource('root'));
+    parent.get('root-res'); // cache in parent
+
+    const child = parent.fork();
+    child.bind('fork-res', () => new Resource('fork'));
+    child.get('fork-res'); // cache in fork
+
+    child.clear();
+
+    t.deepEqual(disposedLog, ['fork']); // only fork-local disposed
+    t.is(parent.get('root-res').name, 'root'); // parent's instance still alive
+});
+
 // ─── getDependencyGraph ───────────────────────────────────────────────────────
 
 test('getDependencyGraph: basic graph with no cycles', (t) => {

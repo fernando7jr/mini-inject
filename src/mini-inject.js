@@ -315,6 +315,8 @@ class DI {
     #bindings = new Map();
     /** @type {DI[]} */
     #subModules = [];
+    /** @type {DI | null} Parent DI instance when this is a fork */
+    #parent = null;
     /** @type {Set<string|Symbol>} Keys currently mid-resolution in this call-stack */
     #resolving = new Set();
     /** @type {Map<string|Symbol, {instance: any}>} Resolver refs for auto-detected cycle proxies */
@@ -386,6 +388,7 @@ class DI {
                 const subBinding = subModule.getBinding(injectable);
                 if (subBinding) return subBinding;
             }
+            if (this.#parent) return this.#parent.getBinding(injectable);
             return undefined;
         }
         return {
@@ -407,6 +410,11 @@ class DI {
             // First we try the subModules
             for (const subModule of this.#subModules) {
                 if (subModule.has(injectable)) return subModule.get(injectable);
+            }
+
+            // Then delegate to the parent (if this is a fork)
+            if (this.#parent && this.#parent.has(injectable)) {
+                return this.#parent.get(injectable);
             }
 
             /* *
@@ -632,6 +640,12 @@ class DI {
             this.#subModules.splice(index, 1);
         }
         return this;
+    }
+
+    fork() {
+        const child = new DI();
+        child.#parent = this;
+        return child;
     }
 
     #disposeInstance(instance) {

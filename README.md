@@ -374,6 +374,87 @@ sub2.bind(A);
 sub2.get(Sub2D); // Sub2D
 ```
 
+### Forking (Scoped Containers)
+
+`di.fork()` creates a child `DI` instance that inherits all of its parent's bindings while keeping its own isolated scope.
+
+Resolution priority inside a fork:
+1. The fork's own local bindings
+2. The fork's sub-modules
+3. The parent (transparently, up the chain)
+
+Parent singletons are **shared** — resolving a parent-bound singleton from a fork returns the same cached instance that the parent holds. Local fork bindings never affect the parent.
+
+This is the primary pattern for per-request scoping in servers, or for test isolation where you want to override a handful of bindings without rebuilding the full container:
+
+```javascript
+const {DI} = require('mini-inject');
+
+class DbPool {
+    query(sql) { return `result of: ${sql}`; }
+}
+class UserRepo {
+    constructor(db) { this.db = db; }
+    findUser(id) { return this.db.query(`SELECT * FROM users WHERE id=${id}`); }
+}
+class RequestContext {
+    constructor(req) { this.userId = req.headers['x-user-id']; }
+}
+class OrderService {
+    constructor(userRepo, ctx) {
+        this.userRepo = userRepo;
+        this.ctx = ctx;
+    }
+    currentUserOrders() { return this.userRepo.findUser(this.ctx.userId); }
+}
+
+// Application-level container — set up once at startup
+const appDI = new DI();
+appDI.bind(DbPool, []);
+appDI.bind(UserRepo, [DbPool]);
+
+// Per-request fork — created and cleared on every request
+const req = {headers: {'x-user-id': '42'}};
+const reqDI = appDI.fork();
+reqDI.bind(RequestContext, () => new RequestContext(req));
+reqDI.bind(OrderService, [UserRepo, RequestContext]);
+
+const svc = reqDI.get(OrderService);
+console.log(svc.currentUserOrders()); // result of: SELECT * FROM users WHERE id=42
+
+// DbPool and UserRepo are shared — same instances as in appDI
+console.log(reqDI.get(DbPool) === appDI.get(DbPool)); // true
+
+// End of request — disposes only the fork's local singletons; appDI is untouched
+reqDI.clear();
+console.log(appDI.has(DbPool)); // true
+```
+
+Forks can also be used to isolate tests without rebuilding the entire application container:
+
+```javascript
+// production container
+const appDI = new DI();
+appDI.bind(DbPool, []);
+appDI.bind(UserRepo, [DbPool]);
+appDI.bind(OrderService, [UserRepo]);
+
+// test — replace only what needs to change
+const testDI = appDI.fork();
+testDI.bind(DbPool, () => new FakeDbPool()); // override
+
+const svc = testDI.get(OrderService); // OrderService → UserRepo → FakeDbPool
+```
+
+Forks can be nested as deep as needed:
+
+```javascript
+const rootDI  = new DI();   // global singletons
+const scopeDI = rootDI.fork();  // request scope
+const childDI = scopeDI.fork(); // sub-scope (e.g. a transaction)
+// childDI sees all of scopeDI's and rootDI's bindings
+```
+
 ### Tokens
 
 The Token is an alternative when the developer wants more control for how the binding keys are generated.
@@ -541,6 +622,7 @@ npx mini-inject analyze ./src/container.js --export=appDI
 
 #### 1.12.0
 
+* Added `di.fork()` — creates a child `DI` instance that delegates unresolved keys to its parent; parent singletons are shared, fork-local bindings stay isolated, and `clear()` on the fork never touches the parent. Supports arbitrary fork depth
 * Added `di.unbind(injectable)` — removes a single binding and its cached singleton instance; calls `dispose()` on the instance if the method exists, then removes both the binding and the cached value
 * Added `{ eager: true }` option to `bind()` — when set on a singleton binding, the instance is created immediately at bind time instead of lazily on first `get()`; silently ignored for transient bindings
 * `clear()` now calls `dispose()` on every cached singleton instance (and on sub-module instances recursively) before wiping the container, giving services a chance to release resources; errors thrown by `dispose()` are silently ignored

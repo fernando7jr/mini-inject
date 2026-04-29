@@ -1149,6 +1149,38 @@ export class DI {
   unbind<T>(injectable: InjectableOrToken<T>): this;
 
   /**
+   * Create a fork (child scope) of this DI instance.
+   *
+   * A fork is a fresh `DI` that delegates any unresolved key upward to its parent:
+   * - Bindings registered **on the fork** are local to the fork and override the parent.
+   * - Bindings registered **on the parent** are transparently resolved through the parent,
+   *   returning the parent's cached singleton instance (so singletons are shared).
+   * - The parent is **never** affected by `clear()` or `unbind()` on the fork.
+   * - The fork can itself be forked, creating a chain of scopes.
+   *
+   * This is the primary pattern for per-request or per-test scoping:
+   *
+   * ```javascript
+   * const appDI = new DI();
+   * appDI.bind(DbPool, []);              // singleton, shared across all forks
+   * appDI.bind(UserRepo, [DbPool]);      // singleton, shared
+   *
+   * // per HTTP request:
+   * const reqDI = appDI.fork();
+   * reqDI.bind(RequestContext, () => new RequestContext(req));
+   * reqDI.bind(OrderService, [UserRepo, RequestContext]);
+   *
+   * const svc = reqDI.get(OrderService); // UserRepo resolved from parent (shared)
+   *
+   * // end of request — only the fork's local singletons are disposed:
+   * reqDI.clear();
+   * ```
+   *
+   * @returns A new `DI` instance whose parent is `this`.
+   */
+  fork(): DI;
+
+  /**
    * Add a sub-module to this. When resolving dependencies it will also search in the sub-modules.
    * Any `DI` instance can have as many sub-modules as necessary. However beware that each module can only access it own dependencies and its sub-modules.
    * A sub-module does not has access to its parent dependencies. During dependency resolution, each module always use its own bindings before trying the subModules.
