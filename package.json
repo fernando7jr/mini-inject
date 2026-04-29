@@ -1,10 +1,13 @@
 {
   "name": "mini-inject",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Minimalistic dependency injection implementation",
   "type": "commonjs",
   "main": "index.js",
   "module": "index.mjs",
+  "bin": {
+    "mini-inject": "./bin/analyze.mjs"
+  },
   "files": [
     "index.js",
     "index.cjs",
@@ -12,7 +15,8 @@
     "index.d.ts",
     "index.d.mts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "bin/"
   ],
   "exports": {
     ".": {

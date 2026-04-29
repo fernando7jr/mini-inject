@@ -1014,4 +1014,301 @@ test('Should clear empty containers without errors', (t) => {
     t.true(di.has('service'));
     const instance = di.get('service');
     t.is(instance.value, 'test');
+
+});
+
+// ─── getDependencyGraph ───────────────────────────────────────────────────────
+
+test('getDependencyGraph: basic graph with no cycles', (t) => {
+    class Svc1 {}
+    class Svc2 {}
+    class Svc3 {}
+
+    const di = new DI();
+    di.bind(Svc1, []);
+    di.bind(Svc2, []);
+    di.bind(Svc3, [Svc1, Svc2]);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 3);
+    t.is(graph.edges.length, 2);
+    t.is(graph.cycles.length, 0);
+
+    const n1 = graph.nodes.find((n) => n.key === 'Svc1');
+    t.deepEqual(n1.deps, []);
+    t.true(n1.isSingleton);
+    t.false(n1.lateResolve);
+    t.false(n1.isSubModule);
+
+    const n3 = graph.nodes.find((n) => n.key === 'Svc3');
+    t.deepEqual(n3.deps, [
+        {type: 'injectable', key: 'Svc1'},
+        {type: 'injectable', key: 'Svc2'},
+    ]);
+
+    const edgeSvc3Svc1 = graph.edges.find((e) => e.from === 'Svc3' && e.to === 'Svc1');
+    t.truthy(edgeSvc3Svc1);
+    t.false(edgeSvc3Svc1.isCircular);
+});
+
+test('getDependencyGraph: custom factory is marked unknown deps', (t) => {
+    class SvcA {}
+
+    const di = new DI();
+    di.bind(SvcA, () => new SvcA());
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 1);
+    t.is(graph.nodes[0].deps, null);
+    t.is(graph.edges.length, 0);
+});
+
+test('getDependencyGraph: detects circular dependency and marks edges', (t) => {
+    class NodeA {}
+    class NodeB {}
+
+    const di = new DI();
+    di.bind(NodeA, [NodeB]);
+    di.bind(NodeB, [NodeA], {lateResolve: true});
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 2);
+    t.is(graph.cycles.length, 1);
+    t.deepEqual(graph.cycles[0], ['NodeA', 'NodeB', 'NodeA']);
+
+    const edgeAB = graph.edges.find((e) => e.from === 'NodeA' && e.to === 'NodeB');
+    t.true(edgeAB.isCircular);
+
+    const edgeBA = graph.edges.find((e) => e.from === 'NodeB' && e.to === 'NodeA');
+    t.true(edgeBA.isCircular);
+
+    const nodeB = graph.nodes.find((n) => n.key === 'NodeB');
+    t.true(nodeB.lateResolve);
+});
+
+test('getDependencyGraph: handles the A,B,C,D,E scenario', (t) => {
+    class SA {}
+    class SB {}
+    class SC {}
+    class SD {}
+    class SE {}
+
+    const di = new DI();
+    di.bind(SA, [SB]);
+    di.bind(SB, [SA], {lateResolve: true});
+    di.bind(SC, [SA, SB]);
+    di.bind(SD, [SA]);
+    di.bind(SE, [SD, SC, SB]);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 5);
+    t.is(graph.cycles.length, 1);
+    t.deepEqual(graph.cycles[0], ['SA', 'SB', 'SA']);
+
+    // Non-circular edges
+    const edgeCtoA = graph.edges.find((e) => e.from === 'SC' && e.to === 'SA');
+    t.false(edgeCtoA.isCircular);
+
+    const edgeEtoD = graph.edges.find((e) => e.from === 'SE' && e.to === 'SD');
+    t.false(edgeEtoD.isCircular);
+
+    // Circular edges
+    const edgeAtoB = graph.edges.find((e) => e.from === 'SA' && e.to === 'SB');
+    t.true(edgeAtoB.isCircular);
+});
+
+test('getDependencyGraph: Token keys are displayed as Token<description>', (t) => {
+    class TokenSvc {}
+
+    const di = new DI();
+    const tok = DI.token(TokenSvc, 'myToken');
+    di.bind(tok, []);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 1);
+    t.is(graph.nodes[0].key, 'Token<myToken>');
+});
+
+test('getDependencyGraph: literal and factory deps are described correctly', (t) => {
+    class SvcWithMixedDeps {}
+
+    function namedFactory() {
+        return 42;
+    }
+
+    const di = new DI();
+    di.bind(SvcWithMixedDeps, [DI.literal(true), DI.factory(namedFactory)]);
+
+    const graph = di.getDependencyGraph();
+    const node = graph.nodes[0];
+
+    t.deepEqual(node.deps, [
+        {type: 'literal', value: true},
+        {type: 'factory', name: 'namedFactory'},
+    ]);
+    // No edges since neither dep is an injectable node
+    t.is(graph.edges.length, 0);
+});
+
+test('getDependencyGraph: anonymous factory dep has name null', (t) => {
+    class SvcAnon {}
+
+    const di = new DI();
+    di.bind(SvcAnon, [DI.factory(() => 99)]);
+
+    const graph = di.getDependencyGraph();
+    const node = graph.nodes[0];
+
+    t.is(node.deps[0].type, 'factory');
+    t.is(node.deps[0].name, null);
+});
+
+test('getDependencyGraph: submodule bindings are marked isSubModule=true', (t) => {
+    class MainSvc {}
+    class SubSvc {}
+
+    const sub = new DI();
+    sub.bind(SubSvc, []);
+
+    const di = new DI();
+    di.bind(MainSvc, [SubSvc]);
+    di.subModule(sub);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 2);
+
+    const mainNode = graph.nodes.find((n) => n.key === 'MainSvc');
+    t.false(mainNode.isSubModule);
+
+    const subNode = graph.nodes.find((n) => n.key === 'SubSvc');
+    t.true(subNode.isSubModule);
+
+    // Edge still present even though SubSvc is from a submodule
+    const edge = graph.edges.find((e) => e.from === 'MainSvc' && e.to === 'SubSvc');
+    t.truthy(edge);
+});
+
+test('getDependencyGraph: static method delegates to instance method', (t) => {
+    class SvcS {}
+
+    const di = new DI();
+    di.bind(SvcS, []);
+
+    const instanceGraph = di.getDependencyGraph();
+    const staticGraph = DI.getDependencyGraph(di);
+
+    t.deepEqual(instanceGraph, staticGraph);
+});
+
+test('getDependencyGraph: non-singleton bindings are marked correctly', (t) => {
+    class TransientSvc {}
+
+    const di = new DI();
+    di.bind(TransientSvc, [], {isSingleton: false});
+
+    const graph = di.getDependencyGraph();
+    const node = graph.nodes[0];
+
+    t.false(node.isSingleton);
+});
+
+// ─── formatDependencyGraph ────────────────────────────────────────────────────
+
+test('formatDependencyGraph: includes header by default', (t) => {
+    class HSvc {}
+
+    const di = new DI();
+    di.bind(HSvc, []);
+
+    const text = di.formatDependencyGraph();
+
+    t.true(text.includes('mini-inject dependency graph'));
+    t.true(text.includes('1 binding(s)'));
+    t.true(text.includes('0 cycle(s)'));
+});
+
+test('formatDependencyGraph: header can be disabled', (t) => {
+    class NoHSvc {}
+
+    const di = new DI();
+    di.bind(NoHSvc, []);
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.false(text.includes('mini-inject dependency graph'));
+});
+
+test('formatDependencyGraph: shows cycle warning on affected rows', (t) => {
+    class CycA {}
+    class CycB {}
+
+    const di = new DI();
+    di.bind(CycA, [CycB]);
+    di.bind(CycB, [CycA], {lateResolve: true});
+
+    const text = di.formatDependencyGraph();
+
+    t.true(text.includes('⚠ CYCLE:'));
+    t.true(text.includes('CycA → CycB → CycA'));
+    t.true(text.includes('Cycles detected:'));
+    t.true(text.includes('[1]'));
+});
+
+test('formatDependencyGraph: shows lateResolve tag', (t) => {
+    class LRA {}
+    class LRB {}
+
+    const di = new DI();
+    di.bind(LRA, [LRB]);
+    di.bind(LRB, [LRA], {lateResolve: true});
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.true(text.includes('lateResolve'));
+});
+
+test('formatDependencyGraph: marks custom factory as unknown deps', (t) => {
+    class CustomSvc {}
+
+    const di = new DI();
+    di.bind(CustomSvc, () => new CustomSvc());
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.true(text.includes('(custom initializer - unknown deps)'));
+});
+
+test('formatDependencyGraph: static method accepts pre-computed graph', (t) => {
+    class StaticFmtSvc {}
+
+    const di = new DI();
+    di.bind(StaticFmtSvc, []);
+
+    const graph = di.getDependencyGraph();
+    const text = DI.formatDependencyGraph(graph);
+
+    t.true(text.includes('StaticFmtSvc'));
+    t.true(text.includes('[singleton]'));
+});
+
+test('formatDependencyGraph: literal and factory deps are rendered in text', (t) => {
+    class MixedDepSvc {}
+
+    function buildValue() {
+        return 'x';
+    }
+
+    const di = new DI();
+    di.bind(MixedDepSvc, [DI.literal(42), DI.factory(buildValue)]);
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.true(text.includes('Literal<42>'));
+    t.true(text.includes('Factory<buildValue>'));
 });

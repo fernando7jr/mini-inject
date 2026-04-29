@@ -146,11 +146,167 @@ class DIFactory {
         this.#fn = fn;
     }
 
+    get name() {
+        return this.#fn?.name || null;
+    }
+
     /** @param {DI} di */
     get(di) {
         return this.#fn(di);
     }
 }
+
+// ─── Dependency-graph helpers ────────────────────────────────────────────────
+
+/**
+ * Converts a raw binding key (string or Symbol) to a human-readable display string.
+ * Token symbols are rendered as `Token<description>`.
+ * @param {string|Symbol} key
+ * @returns {string}
+ */
+function formatKey(key) {
+    if (typeof key === 'string') return key;
+    if (typeof key === 'symbol') {
+        const desc = key.description ?? '';
+        const match = desc.match(/^__DIToken__\[\[(.+)\]\]$/);
+        if (match) return `Token<${match[1]}>`;
+        return desc || String(key);
+    }
+    return String(key);
+}
+
+/**
+ * Converts a raw dependency array (as stored in a binding) into DepDescriptor objects.
+ * @param {Array} rawDeps
+ * @returns {Array<{type:string, key?:string, value?:unknown, name?:string|null}>}
+ */
+function describeRawDeps(rawDeps) {
+    return rawDeps.map((dep) => {
+        if (dep instanceof DILiteral) return {type: 'literal', value: dep.value};
+        if (dep instanceof DIFactory) return {type: 'factory', name: dep.name};
+        return {type: 'injectable', key: formatKey(resolveKey(dep))};
+    });
+}
+
+/**
+ * DFS-based cycle detection over a directed graph described by nodes+edges.
+ * Returns an array of cycles, each cycle being an array of keys where the first
+ * key is repeated at the end: e.g. ["A","B","A"].
+ * @param {{key:string}[]} nodes
+ * @param {{from:string, to:string}[]} edges
+ * @returns {string[][]}
+ */
+function detectCycles(nodes, edges) {
+    const adj = new Map();
+    for (const node of nodes) adj.set(node.key, []);
+    for (const edge of edges) {
+        const neighbors = adj.get(edge.from);
+        if (neighbors) neighbors.push(edge.to);
+    }
+    const visited = new Set();
+    const cycles = [];
+    function dfs(key, path, inStack) {
+        if (inStack.has(key)) {
+            const start = path.indexOf(key);
+            cycles.push([...path.slice(start), key]);
+            return;
+        }
+        if (visited.has(key)) return;
+        inStack.add(key);
+        path.push(key);
+        for (const neighbor of adj.get(key) || []) {
+            dfs(neighbor, path, inStack);
+        }
+        path.pop();
+        inStack.delete(key);
+        visited.add(key);
+    }
+    for (const node of nodes) {
+        if (!visited.has(node.key)) dfs(node.key, [], new Set());
+    }
+    return cycles;
+}
+
+/**
+ * Formats a single DepDescriptor as a concise display string for text output.
+ * @param {{type:string, key?:string, value?:unknown, name?:string|null}} dep
+ * @returns {string}
+ */
+function formatDepText(dep) {
+    if (dep.type === 'injectable') return dep.key;
+    if (dep.type === 'literal') {
+        let val;
+        try {
+            val = JSON.stringify(dep.value);
+            if (val.length > 20) val = val.slice(0, 17) + '...';
+        } catch {
+            val = String(dep.value);
+        }
+        return `Literal<${val}>`;
+    }
+    if (dep.type === 'factory') {
+        return dep.name ? `Factory<${dep.name}>` : 'Factory<anonymous>';
+    }
+    return '?';
+}
+
+/**
+ * Renders a DependencyGraph as a human-readable text report.
+ * @param {{nodes:any[], edges:any[], cycles:string[][]}} graph
+ * @param {{header?:boolean}} [opts]
+ * @returns {string}
+ */
+function formatGraphText(graph, opts) {
+    const {header = true} = opts || {};
+    const lines = [];
+
+    if (header) {
+        const title = `mini-inject dependency graph — ${graph.nodes.length} binding(s), ${graph.cycles.length} cycle(s)`;
+        lines.push(title);
+        lines.push('═'.repeat(title.length));
+        lines.push('');
+    }
+
+    const maxKeyLen = Math.max(4, ...graph.nodes.map((n) => n.key.length));
+
+    // Map each node key to the first cycle string it participates in
+    const nodeToCycle = new Map();
+    for (const cycle of graph.cycles) {
+        const cycleStr = cycle.join(' → ');
+        for (const key of cycle.slice(0, -1)) {
+            if (!nodeToCycle.has(key)) nodeToCycle.set(key, cycleStr);
+        }
+    }
+
+    for (const node of graph.nodes) {
+        const keyCol = node.key.padEnd(maxKeyLen);
+        const singletonCol = node.isSingleton ? '[singleton]' : '[transient]';
+        const lateCol = node.lateResolve ? '  lateResolve' : '             ';
+        let depsCol;
+        if (node.deps === null) {
+            depsCol = '(custom initializer - unknown deps)';
+        } else if (node.deps.length === 0) {
+            depsCol = '';
+        } else {
+            depsCol = node.deps.map(formatDepText).join(', ');
+        }
+        const cycleStr = nodeToCycle.get(node.key);
+        const cycleCol = cycleStr ? `  ⚠ CYCLE: ${cycleStr}` : '';
+        lines.push(`${keyCol}  ${singletonCol}${lateCol}  ${depsCol}${cycleCol}`);
+    }
+
+    if (header && graph.cycles.length > 0) {
+        lines.push('');
+        lines.push('Cycles detected:');
+        graph.cycles.forEach((cycle, i) => {
+            lines.push(`  [${i + 1}] ${cycle.join(' → ')}`);
+        });
+    }
+
+    return lines.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class DI {
     /** @type {Map<string|Symbol, any>} */
@@ -336,6 +492,92 @@ class DI {
         };
     }
 
+    /**
+     * Build a dependency graph for this DI module (and any attached sub-modules).
+     * Bindings declared with an array of dependencies are fully described; bindings
+     * declared with a custom factory function are marked with `deps: null`.
+     * @returns {{nodes: any[], edges: any[], cycles: string[][]}}
+     */
+    getDependencyGraph() {
+        return DI.getDependencyGraph(this);
+    }
+
+    /**
+     * Build a dependency graph for the given DI module.
+     * @param {DI} di
+     * @returns {{nodes: any[], edges: any[], cycles: string[][]}}
+     */
+    static getDependencyGraph(di) {
+        const nodes = [];
+        const nodeKeySet = new Set();
+
+        function collect(diInstance, isSubModule) {
+            for (const [key, binding] of diInstance.#bindings) {
+                const displayKey = formatKey(key);
+                if (nodeKeySet.has(displayKey)) continue; // parent takes precedence
+                nodeKeySet.add(displayKey);
+                nodes.push({
+                    key: displayKey,
+                    isSingleton: binding.isSingleton,
+                    lateResolve: binding.lateResolve,
+                    isSubModule,
+                    deps: binding.rawDeps !== null ? describeRawDeps(binding.rawDeps) : null,
+                });
+            }
+            for (const sub of diInstance.#subModules) {
+                collect(sub, true);
+            }
+        }
+
+        collect(di, false);
+
+        // Build edges — only between known nodes, deduped
+        const edges = [];
+        const edgeSeen = new Set();
+        for (const node of nodes) {
+            if (!node.deps) continue;
+            for (const dep of node.deps) {
+                if (dep.type !== 'injectable') continue;
+                if (!nodeKeySet.has(dep.key)) continue;
+                const edgeKey = `${node.key}→${dep.key}`;
+                if (edgeSeen.has(edgeKey)) continue;
+                edgeSeen.add(edgeKey);
+                edges.push({from: node.key, to: dep.key, isCircular: false});
+            }
+        }
+
+        // Detect cycles then mark affected edges
+        const cycles = detectCycles(nodes, edges);
+        for (const edge of edges) {
+            edge.isCircular = cycles.some((cycle) =>
+                cycle.some(
+                    (k, i) => i < cycle.length - 1 && k === edge.from && cycle[i + 1] === edge.to,
+                ),
+            );
+        }
+
+        return {nodes, edges, cycles};
+    }
+
+    /**
+     * Render the dependency graph of this module as a human-readable text report.
+     * @param {{header?: boolean}} [opts]
+     * @returns {string}
+     */
+    formatDependencyGraph(opts) {
+        return DI.formatDependencyGraph(this.getDependencyGraph(), opts);
+    }
+
+    /**
+     * Render a pre-computed dependency graph as a human-readable text report.
+     * @param {{nodes: any[], edges: any[], cycles: string[][]}} graph
+     * @param {{header?: boolean}} [opts]
+     * @returns {string}
+     */
+    static formatDependencyGraph(graph, opts) {
+        return formatGraphText(graph, opts);
+    }
+
     bind(injectable, dep, opts) {
         const token = injectable;
         injectable = token instanceof Token ? token.value : injectable;
@@ -373,6 +615,7 @@ class DI {
             isSingleton,
             lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
             injectable,
+            rawDeps: dependencies,
         });
         return this;
     }

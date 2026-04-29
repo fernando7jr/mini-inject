@@ -436,7 +436,118 @@ di.get('A'); // Throws 'No binding for injectable "A"'
 di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 ````
 
+### Dependency Graph Analyzer
+
+`mini-inject` can generate a dependency graph for any DI module so you can understand the full dependency tree, spot potential optimisations, and detect circular dependencies before they cause problems at runtime.
+
+#### Programmatic API
+
+```javascript
+const {DI} = require('mini-inject');
+
+class AuthService {}
+class UserService {}
+class OrderService {}
+class NotificationService {}
+
+const di = new DI();
+di.bind(AuthService, []);
+di.bind(UserService, [AuthService]);
+di.bind(OrderService, [UserService, AuthService]);
+di.bind(NotificationService, () => new NotificationService()); // custom factory
+
+// Get a serialisable graph object
+const graph = di.getDependencyGraph();
+// { nodes: [...], edges: [...], cycles: [] }
+console.log(JSON.stringify(graph, null, 2));
+
+// Or get a formatted text report (header is shown by default)
+console.log(di.formatDependencyGraph());
+// mini-inject dependency graph — 4 binding(s), 0 cycle(s)
+// ═══════════════════════════════════════════════════════
+//
+// AuthService           [singleton]
+// UserService           [singleton]               AuthService
+// OrderService          [singleton]               UserService, AuthService
+// NotificationService   [singleton]               (custom initializer - unknown deps)
+
+// Without the header/summary section
+console.log(di.formatDependencyGraph({header: false}));
+
+// Static variants accept a pre-computed graph
+const graph2 = DI.getDependencyGraph(di);
+const text2  = DI.formatDependencyGraph(graph2, {header: false});
+```
+
+Circular dependencies are detected and reported without throwing — they are valid when resolved via `lateResolve: true` or `autoResolveCircularDependencies`:
+
+```javascript
+class A {}
+class B {}
+
+const di = new DI();
+di.bind(A, [B]);
+di.bind(B, [A], {lateResolve: true});
+
+console.log(di.formatDependencyGraph());
+// mini-inject dependency graph — 2 binding(s), 1 cycle(s)
+// ══════════════════════════════════════════════════════
+//
+// A   [singleton]               B  ⚠ CYCLE: A → B → A
+// B   [singleton]  lateResolve  A  ⚠ CYCLE: A → B → A
+//
+// Cycles detected:
+//   [1] A → B → A
+```
+
+The `nodes` array describes each binding:
+
+| Field | Type | Description |
+|---|---|---|
+| `key` | `string` | Display name (`"MyClass"`, `"myKey"`, `"Token<desc>"`) |
+| `isSingleton` | `boolean` | Whether the binding is a singleton |
+| `lateResolve` | `boolean` | Whether `lateResolve: true` is set on this binding |
+| `isSubModule` | `boolean` | `true` when the binding comes from an attached sub-module |
+| `deps` | `DepDescriptor[] \| null` | Dep list, or `null` when a custom factory function was used |
+
+Each `DepDescriptor` is one of:
+- `{ type: 'injectable', key: string }` — another registered injectable
+- `{ type: 'literal', value: unknown }` — a `DI.literal(...)` value
+- `{ type: 'factory', name: string | null }` — a `DI.factory(...)` function (anonymous when `name` is `null`)
+
+#### CLI
+
+```bash
+npx mini-inject analyze <path-to-file>
+```
+
+The file must export a `DI` instance — either as `export default di` (ESM), `module.exports = di` (CJS), or as a named export.
+
+```bash
+# Default: text format with header
+npx mini-inject analyze ./src/container.js
+
+# JSON output (pipe-friendly)
+npx mini-inject analyze ./src/container.js --format=json
+
+# Plain rows, no title or cycles summary
+npx mini-inject analyze ./src/container.js --no-header
+
+# When multiple DI instances are exported, pick one by name
+npx mini-inject analyze ./src/container.js --export=appDI
+```
+
 ## Changelog
+
+#### 1.12.0
+
+* Added `di.getDependencyGraph()` / `DI.getDependencyGraph(di)` — returns a serialisable graph object (`{ nodes, edges, cycles }`) describing all registered bindings, their dependency descriptors, directed edges, and any detected circular-dependency cycles
+* Added `di.formatDependencyGraph(opts?)` / `DI.formatDependencyGraph(graph, opts?)` — renders a dependency graph as a human-readable text report; pass `{ header: false }` to suppress the title and cycles-summary section
+* Added `bin/analyze.mjs` CLI — run `npx mini-inject analyze <file>` to print a dependency report for any module that exports a `DI` instance; supports `--format=text|json`, `--export=<name>`, and `--no-header`
+* Dep descriptors distinguish between `injectable` keys, `Literal<value>`, `Factory<name>`, and `null` (custom factory function — deps cannot be statically determined)
+* Token keys are displayed as `Token<description>` in all outputs
+* Bindings from attached sub-modules are included in the graph and marked with `isSubModule: true`
+* New TypeScript types: `DepDescriptor`, `GraphNode`, `GraphEdge`, `DependencyGraph`, `FormatGraphOptions`
 
 #### 1.11.0
 

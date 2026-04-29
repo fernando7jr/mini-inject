@@ -10,6 +10,64 @@ export type Dependency =
   | DIFactory<any>;
 export type BindingFunc<T> = (di: DI) => T;
 
+// ─── Dependency graph ────────────────────────────────────────────────────────
+
+/** A single dependency descriptor inside a graph node's `deps` array. */
+export type DepDescriptor =
+  | { type: "injectable"; key: string }
+  | { type: "literal"; value: unknown }
+  | { type: "factory"; name: string | null };
+
+/**
+ * A node in the dependency graph — one per binding registered in the DI module.
+ * Nodes whose binding was declared with a custom factory function have `deps: null`
+ * because the dependencies cannot be statically determined.
+ */
+export interface GraphNode {
+  /** Human-readable display key (class name, string key, or `Token<description>`). */
+  key: string;
+  isSingleton: boolean;
+  lateResolve: boolean;
+  /** `true` when the binding originates from an attached sub-module. */
+  isSubModule: boolean;
+  /**
+   * Dependency descriptors for each position in the binding's dependency list.
+   * `null` means the binding was declared with a custom factory function and the
+   * dependencies cannot be statically determined.
+   */
+  deps: DepDescriptor[] | null;
+}
+
+/** A directed edge between two injectable nodes in the dependency graph. */
+export interface GraphEdge {
+  from: string;
+  to: string;
+  /** `true` when this edge is part of at least one circular-dependency cycle. */
+  isCircular: boolean;
+}
+
+/** Full dependency graph returned by `DI.getDependencyGraph()`. */
+export interface DependencyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /**
+   * Each cycle is an array of display keys where the first key is repeated at
+   * the end to make the loop explicit, e.g. `["A", "B", "A"]`.
+   */
+  cycles: string[][];
+}
+
+/** Options for `formatDependencyGraph`. */
+export interface FormatGraphOptions {
+  /**
+   * When `true` (default), a title line and a cycles summary section are
+   * included in the output. Pass `false` to get rows only.
+   */
+  header?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Describes which dependency shapes are acceptable for a single constructor parameter of type `T`.
  *
@@ -253,6 +311,9 @@ export class DILiteral<T> {
  */
 export class DIFactory<T> {
   private constructor(fn: (di: DIGetter) => T);
+
+  /** The name of the wrapped factory function, or `null` if it is anonymous. */
+  readonly name: string | null;
 
   get(di: DIGetter): T;
 }
@@ -545,6 +606,42 @@ export class DI {
    * ```
    */
   autoResolveCircularDependencies(enabled: boolean): this;
+
+  /**
+   * Build a dependency graph for this DI module (and any attached sub-modules).
+   *
+   * Bindings declared with an array of dependencies are fully described.
+   * Bindings declared with a custom factory function have `deps: null` because
+   * the dependencies cannot be statically determined at analysis time.
+   *
+   * The graph can be serialised directly with `JSON.stringify` for JSON output.
+   */
+  getDependencyGraph(): DependencyGraph;
+
+  /**
+   * Build a dependency graph for the given DI module.
+   * Convenience static wrapper around the instance method.
+   * @param di The DI instance to analyse.
+   */
+  static getDependencyGraph(di: DI): DependencyGraph;
+
+  /**
+   * Render the dependency graph of this module as a human-readable text report.
+   * @param opts Optional formatting options (e.g. `{ header: false }`).
+   */
+  formatDependencyGraph(opts?: FormatGraphOptions): string;
+
+  /**
+   * Render a pre-computed `DependencyGraph` as a human-readable text report.
+   * Useful when you have already obtained the graph object and want to format it
+   * separately — for example after enriching or filtering it.
+   * @param graph A graph previously returned by `getDependencyGraph`.
+   * @param opts Optional formatting options.
+   */
+  static formatDependencyGraph(
+    graph: DependencyGraph,
+    opts?: FormatGraphOptions,
+  ): string;
 
   /**
    * Get the binding for the injectable if available otherwise return undefined
