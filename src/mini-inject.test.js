@@ -1017,6 +1017,142 @@ test('Should clear empty containers without errors', (t) => {
 
 });
 
+// ─── unbind ───────────────────────────────────────────────────────────────────
+
+test('unbind should remove binding and prevent further resolution', (t) => {
+    const di = new DI();
+    di.bind(A, [di.literal(1)]);
+    t.true(di.has(A));
+    di.unbind(A);
+    t.false(di.has(A));
+    t.throws(() => di.get(A));
+});
+
+test('unbind should call dispose on cached singleton instance', (t) => {
+    const di = new DI();
+    let disposed = false;
+    class MyService {
+        dispose() {disposed = true;}
+    }
+    di.bind(MyService, []);
+    di.get(MyService); // populate cache
+    t.false(disposed);
+    di.unbind(MyService);
+    t.true(disposed);
+    t.false(di.has(MyService));
+});
+
+test('unbind should not call dispose on non-singleton (not cached)', (t) => {
+    const di = new DI();
+    let disposed = false;
+    class MyService {
+        dispose() {disposed = true;}
+    }
+    di.bind(MyService, [], {isSingleton: false});
+    di.get(MyService); // not cached
+    di.unbind(MyService);
+    t.false(disposed);
+    t.false(di.has(MyService));
+});
+
+test('unbind on unknown injectable should be a no-op', (t) => {
+    const di = new DI();
+    t.notThrows(() => di.unbind(A));
+});
+
+test('unbind should return this for chaining', (t) => {
+    const di = new DI();
+    di.bind(A, [di.literal(1)]);
+    t.is(di.unbind(A), di);
+});
+
+// ─── dispose on clear ─────────────────────────────────────────────────────────
+
+test('clear should call dispose on all cached singleton instances', (t) => {
+    const di = new DI();
+    const disposedLog = [];
+    class ServiceX {
+        constructor(id) {this.id = id;}
+        dispose() {disposedLog.push(this.id);}
+    }
+    di.bind('x1', () => new ServiceX('x1'));
+    di.bind('x2', () => new ServiceX('x2'));
+    di.get('x1');
+    di.get('x2');
+    di.clear();
+    t.deepEqual(disposedLog.sort(), ['x1', 'x2']);
+});
+
+test('clear should not throw when dispose throws', (t) => {
+    const di = new DI();
+    class BadService {
+        dispose() {throw new Error('dispose error');}
+    }
+    di.bind(BadService, []);
+    di.get(BadService);
+    t.notThrows(() => di.clear());
+});
+
+test('clear should call dispose on sub-module cached instances', (t) => {
+    const disposedLog = [];
+    class SubService {
+        dispose() {disposedLog.push('sub');}
+    }
+    const sub = new DI();
+    sub.bind(SubService, []);
+    sub.get(SubService);
+
+    const di = new DI();
+    di.subModule(sub);
+    di.clear();
+    t.deepEqual(disposedLog, ['sub']);
+});
+
+// ─── eager binding ────────────────────────────────────────────────────────────
+
+test('eager bind should instantiate singleton immediately', (t) => {
+    let created = false;
+    class EagerService {
+        constructor() {created = true;}
+    }
+    const di = new DI();
+    t.false(created);
+    di.bind(EagerService, [], {eager: true});
+    t.true(created);
+});
+
+test('eager bind should use same singleton instance on subsequent get', (t) => {
+    let count = 0;
+    class Counter {
+        constructor() {this.id = ++count;}
+    }
+    const di = new DI();
+    di.bind(Counter, [], {eager: true});
+    t.is(count, 1);
+    const c = di.get(Counter);
+    t.is(count, 1); // not created again
+    t.is(c.id, 1);
+});
+
+test('eager bind with isSingleton false should not instantiate', (t) => {
+    let created = false;
+    class EagerTransient {
+        constructor() {created = true;}
+    }
+    const di = new DI();
+    di.bind(EagerTransient, [], {isSingleton: false, eager: true});
+    t.false(created); // eager is ignored for transients
+});
+
+test('eager bind with factory function', (t) => {
+    let created = false;
+    const di = new DI();
+    di.bind('eagerKey', () => {created = true; return {done: true};}, {eager: true});
+    t.true(created);
+    const val = di.get('eagerKey');
+    t.is(val.done, true);
+});
+
 // ─── getDependencyGraph ───────────────────────────────────────────────────────
 
 test('getDependencyGraph: basic graph with no cycles', (t) => {

@@ -607,7 +607,7 @@ class DI {
             return dep;
         })();
 
-        const {isSingleton = true, lateResolve = false} = opts || {};
+        const {isSingleton = true, lateResolve = false, eager = false} = opts || {};
         const key = resolveKey(token);
         if (this.#container.has(key)) this.#container.delete(key);
         this.#bindings.set(key, {
@@ -617,6 +617,7 @@ class DI {
             injectable,
             rawDeps: dependencies,
         });
+        if (eager && isSingleton) this.get(token);
         return this;
     }
 
@@ -633,10 +634,35 @@ class DI {
         return this;
     }
 
+    #disposeInstance(instance) {
+        if (instance && typeof instance.dispose === 'function') {
+            try {
+                instance.dispose();
+            } catch {
+                // ignore errors from dispose
+            }
+        }
+    }
+
+    unbind(injectable) {
+        const key = resolveKey(injectable);
+        if (this.#container.has(key)) {
+            this.#disposeInstance(this.#container.get(key));
+            this.#container.delete(key);
+        }
+        this.#bindings.delete(key);
+        return this;
+    }
+
     clear() {
         // Clear all sub-modules first
         for (const subModule of this.#subModules) {
             subModule.clear();
+        }
+
+        // Dispose all cached singleton instances
+        for (const instance of this.#container.values()) {
+            this.#disposeInstance(instance);
         }
 
         // Clear current instance containers

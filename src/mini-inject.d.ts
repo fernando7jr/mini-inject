@@ -1015,7 +1015,7 @@ export class DI {
   bind<T extends object, Args extends readonly unknown[]>(
     injectable: (new (...args: [...Args]) => T) | Token<T>,
     dependencies: DependenciesFor<Args>,
-    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -1053,7 +1053,7 @@ export class DI {
   bind<T>(
     injectable: ClassConstructor<T> | Token<T>,
     dependencies: Dependency[],
-    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -1088,7 +1088,7 @@ export class DI {
   bind<T>(
     injectable: InjectableOrToken<T>,
     func: BindingFunc<T>,
-    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -1117,6 +1117,36 @@ export class DI {
    *
    */
   bind<T>(injectable: ClassConstructor<T> | Token<T>): this;
+
+  /**
+   * Remove the binding (and its cached singleton instance, if any) for a single injectable.
+   * If the cached instance exposes a `dispose()` method, it is called before the instance
+   * is removed from the container — giving it a chance to release resources (timers, connections, etc.).
+   * Errors thrown by `dispose()` are silently ignored.
+   *
+   * Has no effect when the injectable has no binding.
+   *
+   * @param injectable an injectable class, string key, Symbol, or Token
+   * @returns this
+   * @example
+   * ```javascript
+   * class DbConnection {
+   *   constructor() { this.open = true; }
+   *   dispose() { this.open = false; }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(DbConnection, []);
+   *
+   * const conn = di.get(DbConnection);
+   * console.log(conn.open); // true
+   *
+   * di.unbind(DbConnection);
+   * console.log(conn.open);          // false  — dispose() was called
+   * console.log(di.has(DbConnection)); // false  — binding removed
+   * ```
+   */
+  unbind<T>(injectable: InjectableOrToken<T>): this;
 
   /**
    * Add a sub-module to this. When resolving dependencies it will also search in the sub-modules.
@@ -1212,6 +1242,9 @@ export class DI {
   /**
    * Clears all containers, bindings, and sub-modules from this DI instance.
    * This method also recursively clears all sub-modules.
+   * Before removing each cached singleton instance, `dispose()` is called on it if the method
+   * exists — giving services a chance to release resources (timers, connections, etc.).
+   * Errors thrown by `dispose()` are silently ignored.
    * After calling clear(), the DI instance will be in a clean state as if it was just created.
    * @returns void
    * @example

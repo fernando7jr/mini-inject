@@ -541,6 +541,9 @@ npx mini-inject analyze ./src/container.js --export=appDI
 
 #### 1.12.0
 
+* Added `di.unbind(injectable)` — removes a single binding and its cached singleton instance; calls `dispose()` on the instance if the method exists, then removes both the binding and the cached value
+* Added `{ eager: true }` option to `bind()` — when set on a singleton binding, the instance is created immediately at bind time instead of lazily on first `get()`; silently ignored for transient bindings
+* `clear()` now calls `dispose()` on every cached singleton instance (and on sub-module instances recursively) before wiping the container, giving services a chance to release resources; errors thrown by `dispose()` are silently ignored
 * Added `di.getDependencyGraph()` / `DI.getDependencyGraph(di)` — returns a serialisable graph object (`{ nodes, edges, cycles }`) describing all registered bindings, their dependency descriptors, directed edges, and any detected circular-dependency cycles
 * Added `di.formatDependencyGraph(opts?)` / `DI.formatDependencyGraph(graph, opts?)` — renders a dependency graph as a human-readable text report; pass `{ header: false }` to suppress the title and cycles-summary section
 * Added `bin/analyze.mjs` CLI — run `npx mini-inject analyze <file>` to print a dependency report for any module that exports a `DI` instance; supports `--format=text|json`, `--export=<name>`, and `--no-header`
