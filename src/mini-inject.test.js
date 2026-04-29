@@ -208,6 +208,289 @@ test('Should solve the circular dependency problem through "lateResolve"', (t) =
     t.truthy(a2);
     t.is(a1.value, 7);
     t.is(a2.value, 3);
+    t.true(a1 instanceof A1);
+    t.is(Object.prototype.toString.call(a1), '[object A1]');
+});
+
+test('Should automatically resolve circular dependencies without lateResolve', (t) => {
+    DI.autoResolveCircularDependencies(true);
+    try {
+        class ServiceA {
+            constructor(b) {
+                this.b = b;
+            }
+
+            getName() {
+                return 'A';
+            }
+        }
+
+        class ServiceB {
+            constructor(a) {
+                this.a = a;
+            }
+
+            getName() {
+                return 'B';
+            }
+        }
+
+        const di = new DI();
+        // No lateResolve flag needed — auto mode detects the cycle at runtime
+        di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)));
+        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)));
+
+        const a = di.get(ServiceA);
+        const b = di.get(ServiceB);
+
+        t.truthy(a);
+        t.truthy(b);
+        t.is(a.getName(), 'A');
+        t.is(b.getName(), 'B');
+        t.is(a.b.getName(), 'B');
+        t.is(b.a.getName(), 'A');
+    } finally {
+        DI.autoResolveCircularDependencies(false);
+    }
+});
+
+test('Should maintain singleton contract with autoResolveCircularDependencies', (t) => {
+    DI.autoResolveCircularDependencies(true);
+    try {
+        class ServiceA {
+            constructor(b) {
+                this.b = b;
+            }
+        }
+
+        class ServiceB {
+            constructor(a) {
+                this.a = a;
+            }
+        }
+
+        const di = new DI();
+        di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)));
+        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)));
+
+        const a1 = di.get(ServiceA);
+        const a2 = di.get(ServiceA);
+        const b1 = di.get(ServiceB);
+        const b2 = di.get(ServiceB);
+
+        // Singleton: always the same object reference
+        t.is(a1, a2);
+        t.is(b1, b2);
+        // The cyclic back-reference is the same proxy that di.get() returns
+        t.is(b1.a, a1);
+    } finally {
+        DI.autoResolveCircularDependencies(false);
+    }
+});
+
+test('Should override lateResolve option when autoResolveCircularDependencies is enabled', (t) => {
+    DI.autoResolveCircularDependencies(true);
+    try {
+        class ServiceA {
+            constructor(b) {
+                this.b = b;
+            }
+
+            getName() {
+                return 'A';
+            }
+        }
+
+        class ServiceB {
+            constructor(a) {
+                this.a = a;
+            }
+
+            getName() {
+                return 'B';
+            }
+        }
+
+        const di = new DI();
+        // lateResolve: true is ignored — auto mode takes precedence
+        di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)), {lateResolve: true});
+        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)), {lateResolve: true});
+
+        const a = di.get(ServiceA);
+        const b = di.get(ServiceB);
+
+        t.is(a.getName(), 'A');
+        t.is(b.getName(), 'B');
+        t.is(a.b.getName(), 'B');
+        t.is(b.a.getName(), 'A');
+    } finally {
+        DI.autoResolveCircularDependencies(false);
+    }
+});
+
+test('Should not create proxies for non-circular dependencies with autoResolveCircularDependencies', (t) => {
+    DI.autoResolveCircularDependencies(true);
+    try {
+        class ServiceA {
+            getValue() {
+                return 42;
+            }
+        }
+
+        class ServiceB {
+            constructor(a) {
+                this.a = a;
+            }
+
+            getValue() {
+                return this.a.getValue() * 2;
+            }
+        }
+
+        const di = new DI();
+        di.bind(ServiceA, () => new ServiceA());
+        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)));
+
+        const b = di.get(ServiceB);
+        t.is(b.getValue(), 84);
+        // No cycle → real instances stored directly, no Proxy wrapping
+        t.true(b instanceof ServiceB);
+        t.true(b.a instanceof ServiceA);
+    } finally {
+        DI.autoResolveCircularDependencies(false);
+    }
+});
+
+test('Should automatically resolve circular dependencies using instance-level switch', (t) => {
+    class ServiceA {
+        constructor(b) {
+            this.b = b;
+        }
+
+        getName() {
+            return 'A';
+        }
+    }
+
+    class ServiceB {
+        constructor(a) {
+            this.a = a;
+        }
+
+        getName() {
+            return 'B';
+        }
+    }
+
+    const di = new DI();
+    // Enable only on this instance — global flag stays off
+    di.autoResolveCircularDependencies(true);
+    di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)));
+    di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)));
+
+    const a = di.get(ServiceA);
+    const b = di.get(ServiceB);
+
+    t.is(a.getName(), 'A');
+    t.is(b.getName(), 'B');
+    t.is(a.b.getName(), 'B');
+    t.is(b.a.getName(), 'A');
+});
+
+test('Instance-level autoResolveCircularDependencies should not affect other instances', (t) => {
+    class ServiceA {
+        constructor(b) {
+            this.b = b;
+        }
+    }
+
+    class ServiceB {
+        constructor(a) {
+            this.a = a;
+        }
+    }
+
+    const diAuto = new DI();
+    diAuto.autoResolveCircularDependencies(true);
+    diAuto.bind(ServiceA, () => new ServiceA(diAuto.get(ServiceB)));
+    diAuto.bind(ServiceB, () => new ServiceB(diAuto.get(ServiceA)));
+
+    // This DI instance has auto off — circular deps without lateResolve will throw
+    const diNormal = new DI();
+    diNormal.bind(ServiceA, () => new ServiceA(diNormal.get(ServiceB)));
+    diNormal.bind(ServiceB, () => new ServiceB(diNormal.get(ServiceA)));
+
+    // Auto instance resolves fine
+    t.notThrows(() => diAuto.get(ServiceA));
+
+    // Normal instance with mutual deps and no lateResolve will throw a descriptive error
+    t.throws(() => diNormal.get(ServiceA), {message: /Circular dependency detected/});
+});
+
+test('Global autoResolveCircularDependencies takes precedence over instance setting', (t) => {
+    DI.autoResolveCircularDependencies(true);
+    try {
+        class ServiceA {
+            constructor(b) {
+                this.b = b;
+            }
+
+            getName() {
+                return 'A';
+            }
+        }
+
+        class ServiceB {
+            constructor(a) {
+                this.a = a;
+            }
+
+            getName() {
+                return 'B';
+            }
+        }
+
+        // Instance-level is explicitly off, but global is on — global wins
+        const di = new DI();
+        di.autoResolveCircularDependencies(false);
+        di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)));
+        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)));
+
+        const a = di.get(ServiceA);
+        const b = di.get(ServiceB);
+
+        t.is(a.getName(), 'A');
+        t.is(b.getName(), 'B');
+    } finally {
+        DI.autoResolveCircularDependencies(false);
+    }
+});
+
+test('Should throw a descriptive error for circular dependencies without lateResolve or auto mode', (t) => {
+    class ServiceA {
+        constructor(b) {
+            this.b = b;
+        }
+    }
+
+    class ServiceB {
+        constructor(a) {
+            this.a = a;
+        }
+    }
+
+    const di = new DI();
+    di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)));
+    di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)));
+
+    const err = t.throws(() => di.get(ServiceA));
+    t.regex(err.message, /Circular dependency detected/);
+    // Chain must mention both classes
+    t.regex(err.message, /ServiceA/);
+    t.regex(err.message, /ServiceB/);
+    // Must include guidance
+    t.regex(err.message, /lateResolve/);
+    t.regex(err.message, /autoResolveCircularDependencies/);
 });
 
 test('Should auto bind using dependencies list', async (t) => {
@@ -555,27 +838,27 @@ test('Should accept tokens for binding', async (t) => {
 
 test('Should clear all containers and bindings', (t) => {
     const di = new DI();
-    
+
     // Add some bindings and get instances
-    di.bind('testService', () => ({ value: 'test' }));
+    di.bind('testService', () => ({value: 'test'}));
     di.bind(A, [di.literal(42)]);
-    
+
     // Verify bindings exist and containers have content
     t.true(di.has('testService'));
     t.true(di.has(A));
-    
+
     const instance1 = di.get('testService');
     const instance2 = di.get(A);
     t.truthy(instance1);
     t.truthy(instance2);
-    
+
     // Clear the DI container
     di.clear();
-    
+
     // Verify all containers are cleared
     t.false(di.has('testService'));
     t.false(di.has(A));
-    
+
     // Verify getting non-existent bindings throws errors
     t.throws(() => di.get('testService'));
     t.throws(() => di.get(A));
@@ -586,17 +869,17 @@ test('Should clear sub-modules recursively', (t) => {
     const subDI1 = new DI();
     const subDI2 = new DI();
     const nestedSubDI = new DI();
-    
+
     // Set up nested sub-modules
     subDI1.subModule(nestedSubDI);
     mainDI.subModule(subDI1, subDI2);
-    
+
     // Add bindings to each level
-    mainDI.bind('mainService', () => ({ value: 'main' }));
-    subDI1.bind('subService1', () => ({ value: 'sub1' }));
-    subDI2.bind('subService2', () => ({ value: 'sub2' }));
-    nestedSubDI.bind('nestedService', () => ({ value: 'nested' }));
-    
+    mainDI.bind('mainService', () => ({value: 'main'}));
+    subDI1.bind('subService1', () => ({value: 'sub1'}));
+    subDI2.bind('subService2', () => ({value: 'sub2'}));
+    nestedSubDI.bind('nestedService', () => ({value: 'nested'}));
+
     // Verify all bindings exist
     t.true(mainDI.has('mainService'));
     t.true(mainDI.has('subService1'));
@@ -606,16 +889,16 @@ test('Should clear sub-modules recursively', (t) => {
     t.true(subDI1.has('nestedService'));
     t.true(subDI2.has('subService2'));
     t.true(nestedSubDI.has('nestedService'));
-    
+
     // Clear the main DI container
     mainDI.clear();
-    
+
     // Verify main container is cleared
     t.false(mainDI.has('mainService'));
     t.false(mainDI.has('subService1'));
     t.false(mainDI.has('subService2'));
     t.false(mainDI.has('nestedService'));
-    
+
     // Verify sub-modules are also cleared
     t.false(subDI1.has('subService1'));
     t.false(subDI1.has('nestedService'));
@@ -626,33 +909,33 @@ test('Should clear sub-modules recursively', (t) => {
 test('Should clear singleton instances from container', (t) => {
     const di = new DI();
     let instanceCount = 0;
-    
+
     // Bind a singleton service that tracks instance creation
     di.bind('counter', () => {
         instanceCount++;
-        return { count: instanceCount };
-    }, { isSingleton: true });
-    
+        return {count: instanceCount};
+    }, {isSingleton: true});
+
     // Get the singleton instance
     const instance1 = di.get('counter');
     t.is(instance1.count, 1);
     t.is(instanceCount, 1);
-    
+
     // Get it again to verify it's the same instance
     const instance2 = di.get('counter');
     t.is(instance2.count, 1);
     t.is(instanceCount, 1);
     t.is(instance1, instance2);
-    
+
     // Clear the container
     di.clear();
-    
+
     // Re-bind the same service
     di.bind('counter', () => {
         instanceCount++;
-        return { count: instanceCount };
-    }, { isSingleton: true });
-    
+        return {count: instanceCount};
+    }, {isSingleton: true});
+
     // Get a new instance after clearing
     const instance3 = di.get('counter');
     t.is(instance3.count, 2);
@@ -662,7 +945,7 @@ test('Should clear singleton instances from container', (t) => {
 
 test('Should clear late-resolved proxies', (t) => {
     const di = new DI();
-    
+
     // Create classes for circular dependency scenario
     class ServiceA {
         constructor(serviceB) {
@@ -670,33 +953,33 @@ test('Should clear late-resolved proxies', (t) => {
             this.name = 'A';
         }
     }
-    
+
     class ServiceB {
         constructor() {
             this.name = 'B';
         }
-        
+
         getA() {
             return di.get(ServiceA);
         }
     }
-    
+
     // Create circular dependency scenario with late resolve
-    di.bind(ServiceA, [ServiceB], { lateResolve: true });
+    di.bind(ServiceA, [ServiceB], {lateResolve: true});
     di.bind(ServiceB, () => new ServiceB());
-    
+
     // Get the late-resolved service
     const serviceA = di.get(ServiceA);
     t.truthy(serviceA);
     t.is(serviceA.name, 'A');
-    
+
     // Verify it's working
     const serviceB = di.get(ServiceB);
     t.is(serviceB.name, 'B');
-    
+
     // Clear the container
     di.clear();
-    
+
     // Verify the bindings are gone
     t.false(di.has(ServiceA));
     t.false(di.has(ServiceB));
@@ -706,15 +989,15 @@ test('Should clear late-resolved proxies', (t) => {
 
 test('Should allow re-binding after clear', (t) => {
     const di = new DI();
-    
+
     // Initial binding
-    di.bind('service', () => ({ version: 1 }));
+    di.bind('service', () => ({version: 1}));
     const instance1 = di.get('service');
     t.is(instance1.version, 1);
-    
+
     // Clear and re-bind with different implementation
     di.clear();
-    di.bind('service', () => ({ version: 2 }));
+    di.bind('service', () => ({version: 2}));
     const instance2 = di.get('service');
     t.is(instance2.version, 2);
     t.not(instance1, instance2);
@@ -722,12 +1005,12 @@ test('Should allow re-binding after clear', (t) => {
 
 test('Should clear empty containers without errors', (t) => {
     const di = new DI();
-    
+
     // Clear an empty container should not throw
     t.notThrows(() => di.clear());
-    
+
     // Should still be able to bind after clearing empty container
-    di.bind('service', () => ({ value: 'test' }));
+    di.bind('service', () => ({value: 'test'}));
     t.true(di.has('service'));
     const instance = di.get('service');
     t.is(instance.value, 'test');

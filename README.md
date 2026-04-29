@@ -123,6 +123,37 @@ console.log(a1.value); // 7
 console.log(a2.value); // 3
 
 
+/// Solved automatically — no lateResolve flags needed
+// Call once at app startup, or per-instance with di.autoResolveCircularDependencies(true)
+DI.autoResolveCircularDependencies(true);
+
+const di2 = new DI();
+di2.bind(A1, (di) => new A1(5, di.get(A2)));
+di2.bind(A2, (di) => new A2(2, di.get(A1))); // cycle detected at runtime; Proxy created only for the caught binding
+
+const a1 = di2.get(A1); // Does not cause stack-overflow
+const a2 = di2.get(A2); // Does not cause stack-overflow
+console.log(a1.value); // 7
+console.log(a2.value); // 3
+
+DI.autoResolveCircularDependencies(false); // restore default
+
+
+/// Neither strategy used — descriptive error thrown
+const di3 = new DI();
+di3.bind(A1, (di) => new A1(5, di.get(A2)));
+di3.bind(A2, (di) => new A2(2, di.get(A1)));
+
+try {
+    di3.get(A1); // throws immediately
+} catch (err) {
+    console.error(err.message);
+    // Circular dependency detected: A1 → A2 → A1.
+    // Use "lateResolve: true" on one of the bindings or enable
+    // "autoResolveCircularDependencies" to resolve it automatically.
+}
+
+
 /// Solved through getResolver
 class B1 {
     constructor(n, b2) {
@@ -165,6 +196,70 @@ const b1 = di.get(B1); // Does not cause stack-overflow
 const b2 = di.get(B2); // Does not cause stack-overflow
 console.log(b1.value); // 7
 console.log(b2.value); // 3
+```
+
+### Automatic Circular Dependency Resolution
+
+`mini-inject` can automatically detect and resolve circular dependencies at runtime without requiring any `lateResolve` flags on your bindings.
+
+There are three ways circular dependencies are handled, applied in this priority order:
+
+| Priority | Strategy | Behaviour |
+|---|---|---|
+| 1 | `DI.autoResolveCircularDependencies(true)` | All instances auto-detect cycles. `lateResolve` flags are ignored. |
+| 2 | `instance.autoResolveCircularDependencies(true)` | Only this instance auto-detects cycles. Other instances are unaffected. |
+| 3 | `lateResolve: true` on a binding | Manual opt-in; a Proxy is always created for that binding. |
+| — | Neither | A descriptive error is thrown listing the full dependency chain. |
+
+When auto mode is active (strategies 1 or 2), a lazy `Proxy` is created **only** for the binding actually caught in the cycle, not every binding involved. The Proxy is transparent — it supports `instanceof`, correct class names in logs/debuggers, and full property access.
+
+```javascript
+const {DI} = require('mini-inject');
+
+class ServiceA {
+    constructor(b) { this.b = b; }
+    greet() { return `A (b is ${this.b.name})`; }
+}
+
+class ServiceB {
+    constructor(a) { this.a = a; }
+    get name() { return 'B'; }
+    greet() { return `B (a is ${this.a.greet()})`; }
+}
+
+// --- Global flag: affects every DI instance ---
+DI.autoResolveCircularDependencies(true);
+
+const di = new DI();
+di.bind(ServiceA, (di) => new ServiceA(di.get(ServiceB)));
+di.bind(ServiceB, (di) => new ServiceB(di.get(ServiceA)));
+
+const a = di.get(ServiceA);
+console.log(a instanceof ServiceA); // true  (Proxy preserves instanceof)
+console.log(a.greet());             // A (b is B)
+
+DI.autoResolveCircularDependencies(false); // restore default
+
+// --- Instance flag: affects only this DI instance ---
+const di2 = new DI();
+di2.autoResolveCircularDependencies(true);
+di2.bind(ServiceA, (di) => new ServiceA(di.get(ServiceB)));
+di2.bind(ServiceB, (di) => new ServiceB(di.get(ServiceA)));
+
+const a2 = di2.get(ServiceA); // resolves fine
+
+const di3 = new DI(); // auto mode is still off here
+di3.bind(ServiceA, (di) => new ServiceA(di.get(ServiceB)));
+di3.bind(ServiceB, (di) => new ServiceB(di.get(ServiceA)));
+
+try {
+    di3.get(ServiceA); // throws immediately — no lateResolve, no auto mode
+} catch (err) {
+    console.error(err.message);
+    // Circular dependency detected: ServiceA → ServiceB → ServiceA.
+    // Use "lateResolve: true" on one of the bindings or enable
+    // "autoResolveCircularDependencies" to resolve it automatically.
+}
 ```
 
 ### Clearing DI Containers
@@ -343,7 +438,14 @@ di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 
 ## Changelog
 
-#### 1.10.1
+#### 1.11.0
+
+* Added `DI.autoResolveCircularDependencies(true/false)` — global static flag that automatically detects and resolves circular dependencies at runtime for all instances, without needing any `lateResolve` flags on bindings
+* Added `instance.autoResolveCircularDependencies(true/false)` — per-instance flag with the same behaviour, only affecting that specific `DI` instance. The global flag takes precedence
+* When neither auto mode nor `lateResolve` is used and a cycle is encountered, `get()` now throws a descriptive error listing the full dependency chain (e.g. `"Circular dependency detected: A → B → A"`) with instructions on how to fix it
+* Updated TypeScript declarations and JSDoc for all affected methods
+
+#### 1.10.1 and 1.10.2
 
 * Improved `getAll` method signatures to use named parameters instead of tuple types
 * Fixed TypeScript compatibility with the latest TypeScript versions

@@ -39,8 +39,8 @@ if (!sourceCode.includes('export {')) {
 
 // Generate CommonJS version
 const cjsCode = sourceCode.replace(
-    /^export \{ (.+) \};?$/m,
-    'module.exports = { $1 };'
+    /^export \{\s?(.+)\s?\};?$/m,
+    'module.exports = {$1};'
 );
 
 // Generate ES Module version (source is already in ESM format)
@@ -78,40 +78,40 @@ try {
     // Ensure test directory exists
     const testDir = path.join(distDir, 'test');
     if (!fs.existsSync(testDir)) {
-        fs.mkdirSync(testDir, { recursive: true });
+        fs.mkdirSync(testDir, {recursive: true});
     }
 
     // Write JavaScript files
     fs.writeFileSync(path.join(distDir, 'index.cjs'), cjsCode);
     console.log('✅ Generated index.cjs (CommonJS)');
-    
+
     fs.writeFileSync(path.join(distDir, 'index.mjs'), esmCode);
     console.log('✅ Generated index.mjs (ES Module)');
-    
+
     fs.writeFileSync(path.join(distDir, 'index.js'), indexJsCode);
     console.log('✅ Generated index.js (CJS wrapper)');
 
     // Write TypeScript definition files
     fs.writeFileSync(path.join(distDir, 'index.d.ts'), cjsTypes);
     console.log('✅ Generated index.d.ts (TypeScript definitions for CJS)');
-    
+
     fs.writeFileSync(path.join(distDir, 'index.d.mts'), esmTypes);
     console.log('✅ Generated index.d.mts (TypeScript definitions for ESM)');
 
     // Write test files
     fs.writeFileSync(path.join(distDir, 'test', 'index.test.cjs'), cjsTestCode);
     console.log('✅ Generated test/index.test.cjs (CommonJS test)');
-    
+
     fs.writeFileSync(path.join(distDir, 'test', 'index.test.mjs'), esmTestCode);
     console.log('✅ Generated test/index.test.mjs (ES Module test)');
-    
+
     console.log('\n🎉 Build completed successfully!');
     console.log('📦 Ready for npm publish with files:');
     console.log('   - index.js, index.cjs, index.mjs (JavaScript)');
     console.log('   - index.d.ts, index.d.mts (TypeScript definitions)');
-    console.log('   - test/index.test.cjs, test/index.test.mjs (Test files)'); 
+    console.log('   - test/index.test.cjs, test/index.test.mjs (Test files)');
     console.log('   - package.json, README.md, LICENSE');
-    
+
 } catch (error) {
     console.error('❌ Build failed:', error.message);
     process.exit(1);

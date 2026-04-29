@@ -1,22 +1,26 @@
 function isClass(f) {
-    if (typeof f !== 'function') return false;
-    const prototype = Object.getOwnPropertyDescriptor(f, 'prototype');
+    if (typeof f !== "function") return false;
+    const prototype = Object.getOwnPropertyDescriptor(f, "prototype");
     if (!prototype) return false;
     return !prototype.writable;
 }
 
 function resolveKey(injectable) {
-    if (!injectable) throw new Error(`Could not resolve injectable name from "${injectable}"`);
-    else if (typeof injectable === 'string' || injectable instanceof Symbol) return injectable;
+    if (!injectable)
+        throw new Error(`Could not resolve injectable name from "${injectable}"`);
+    else if (typeof injectable === "string" || injectable instanceof Symbol)
+        return injectable;
     else if (injectable instanceof Token) return injectable.toSymbol();
     else if (injectable.name) return injectable.name;
-    else if (injectable.toString && injectable.toString.apply) return injectable.toString();
-    else if (injectable.constructor && injectable.constructor.name) return injectable.constructor.name;
+    else if (injectable.toString && injectable.toString.apply)
+        return injectable.toString();
+    else if (injectable.constructor && injectable.constructor.name)
+        return injectable.constructor.name;
     return new String(injectable);
 }
 
 class Token {
-    #injectable
+    #injectable;
     #description;
     #symbol; // Cache the symbol to avoid recreating it
 
@@ -45,8 +49,11 @@ class DIProxyBuilder {
     #__instance;
     /** @type {() => any} */
     #getter = null;
-    constructor(getter) {
+    #targetClass;
+
+    constructor(getter, targetClass) {
         this.#getter = getter;
+        this.#targetClass = targetClass;
     }
 
     #getInstance() {
@@ -59,13 +66,56 @@ class DIProxyBuilder {
 
     build() {
         const getInstance = () => this.#getInstance();
+        const className = this.#targetClass?.name || "Object";
+        const shell = this.#targetClass?.prototype
+            ? Object.create(this.#targetClass.prototype)
+            : {};
         const handler = {
-            get(_, p) {
-                return getInstance()[p];
+            get(target, prop, receiver) {
+                if (prop === Symbol.toStringTag) {
+                    return className;
+                }
+
+                const instance = getInstance();
+                const value = Reflect.get(instance, prop, instance);
+                if (typeof value === "function") {
+                    return value.bind(instance);
+                }
+                return value;
+            },
+            set(_, prop, value, receiver) {
+                return Reflect.set(getInstance(), prop, value, receiver);
+            },
+            has(_, prop) {
+                return Reflect.has(getInstance(), prop);
+            },
+            ownKeys(_) {
+                return Reflect.ownKeys(getInstance());
+            },
+            getOwnPropertyDescriptor(_, prop) {
+                return Reflect.getOwnPropertyDescriptor(getInstance(), prop);
+            },
+            defineProperty(_, prop, descriptor) {
+                return Reflect.defineProperty(getInstance(), prop, descriptor);
+            },
+            deleteProperty(_, prop) {
+                return Reflect.deleteProperty(getInstance(), prop);
+            },
+            getPrototypeOf(target) {
+                return Reflect.getPrototypeOf(target);
+            },
+            setPrototypeOf(target, proto) {
+                return Reflect.setPrototypeOf(target, proto);
+            },
+            isExtensible(target) {
+                return Reflect.isExtensible(target);
+            },
+            preventExtensions(target) {
+                return Reflect.preventExtensions(target);
             },
         };
-        // Use an empty object instead of 'this' to avoid circular references
-        return new Proxy({}, handler);
+        // Use a shell object to preserve prototype checks while lazily resolving.
+        return new Proxy(shell, handler);
     }
 
     dispose() {
@@ -105,14 +155,47 @@ class DIFactory {
 class DI {
     /** @type {Map<string|Symbol, any>} */
     #container = new Map();
-    /** @type {Map<string|Symbol, {func: Function, isSingleton: boolean, lateResolve: boolean}>} */
+    /** @type {Map<string|Symbol, {func: Function, isSingleton: boolean, lateResolve: boolean, injectable: any}>} */
     #bindings = new Map();
     /** @type {DI[]} */
     #subModules = [];
+    /** @type {Set<string|Symbol>} Keys currently mid-resolution in this call-stack */
+    #resolving = new Set();
+    /** @type {Map<string|Symbol, {instance: any}>} Resolver refs for auto-detected cycle proxies */
+    #pendingProxies = new Map();
+    /** @type {Array<string|Symbol>} Ordered stack of keys being resolved (used for cycle detection in normal mode) */
+    #resolutionStack = [];
+    /** @type {boolean} */
+    #instanceAutoResolveCircular = false;
+
+    /** @type {boolean} */
+    static #autoResolveCircular = false;
+
+    /**
+     * When enabled globally, all DI instances ignore `lateResolve` and automatically
+     * detect circular dependencies at resolution time. Opt-in; off by default.
+     * Takes precedence over the instance-level setting.
+     * @param {boolean} enabled
+     */
+    static autoResolveCircularDependencies(enabled) {
+        DI.#autoResolveCircular = Boolean(enabled);
+    }
+
+    /**
+     * When enabled on this instance, it ignores `lateResolve` and automatically
+     * detects circular dependencies at resolution time, creating a Proxy only when
+     * a cycle is actually encountered. Opt-in; off by default.
+     * The global setting takes precedence over this instance-level setting.
+     * @param {boolean} enabled
+     */
+    autoResolveCircularDependencies(enabled) {
+        this.#instanceAutoResolveCircular = Boolean(enabled);
+        return this;
+    }
 
     #proxy(binding) {
         const getter = () => binding.func(this);
-        return new DIProxyBuilder(getter).build();
+        return new DIProxyBuilder(getter, binding.injectable).build();
     }
 
     static literal(value) {
@@ -181,11 +264,60 @@ class DI {
         } else if (!binding.isSingleton) {
             return binding.func(this);
         } else if (!this.#container.has(key)) {
-            if (binding.lateResolve) {
+            if (DI.#autoResolveCircular || this.#instanceAutoResolveCircular) {
+                if (this.#resolving.has(key)) {
+                    // Cycle detected at runtime: create a Proxy now so the caller
+                    // gets a valid (lazily-resolved) reference. The real instance
+                    // will be set into resolverRef once the outer factory returns.
+                    const resolverRef = {instance: undefined};
+                    const proxy = new DIProxyBuilder(
+                        () => resolverRef.instance,
+                        binding.injectable,
+                    ).build();
+                    this.#container.set(key, proxy);
+                    this.#pendingProxies.set(key, resolverRef);
+                } else {
+                    this.#resolving.add(key);
+                    try {
+                        const instance = binding.func(this);
+                        if (this.#pendingProxies.has(key)) {
+                            // A cycle proxy was created for this key during its own
+                            // resolution. Wire the real instance into it and keep the
+                            // Proxy as the singleton in the container.
+                            this.#pendingProxies.get(key).instance = instance;
+                            this.#pendingProxies.delete(key);
+                        } else {
+                            // No cycle: store the real instance directly.
+                            this.#container.set(key, instance);
+                        }
+                    } finally {
+                        this.#resolving.delete(key);
+                        // If the factory threw after a proxy was already created,
+                        // remove the dangling proxy so the key is re-resolvable.
+                        if (this.#pendingProxies.has(key)) {
+                            this.#pendingProxies.delete(key);
+                            this.#container.delete(key);
+                        }
+                    }
+                }
+            } else if (binding.lateResolve) {
                 this.#container.set(key, this.#proxy(binding));
             } else {
-                const instance = binding.func(this);
-                this.#container.set(key, instance);
+                if (this.#resolutionStack.includes(key)) {
+                    const chain = [...this.#resolutionStack, key].map((k) => String(k)).join(' → ');
+                    throw new Error(
+                        `Circular dependency detected: ${chain}. ` +
+                        `Use "lateResolve: true" on one of the bindings or enable ` +
+                        `"autoResolveCircularDependencies" to resolve it automatically.`,
+                    );
+                }
+                this.#resolutionStack.push(key);
+                try {
+                    const instance = binding.func(this);
+                    this.#container.set(key, instance);
+                } finally {
+                    this.#resolutionStack.pop();
+                }
             }
         }
         return this.#container.get(key);
@@ -211,7 +343,9 @@ class DI {
         const dependencies = !dep ? [] : Array.isArray(dep) ? dep : null;
         const dependenciesArrayIsEmpty = dependencies?.length === 0;
         if (dependencies && !injectable?.prototype?.constructor) {
-            throw new Error('Array of dependencies requires a constructable injectable');
+            throw new Error(
+                "Array of dependencies requires a constructable injectable",
+            );
         }
 
         const func = (() => {
@@ -223,7 +357,8 @@ class DI {
                         else if (d instanceof DIFactory) return d.get(di);
                         return di.get(d);
                     });
-                    if (!isClass(injectable)) return injectable.apply(injectable, resolvedDependencies);
+                    if (!isClass(injectable))
+                        return injectable.apply(injectable, resolvedDependencies);
                     return new injectable(...resolvedDependencies);
                 };
             }
@@ -237,6 +372,7 @@ class DI {
             func,
             isSingleton,
             lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
+            injectable,
         });
         return this;
     }
@@ -259,13 +395,16 @@ class DI {
         for (const subModule of this.#subModules) {
             subModule.clear();
         }
-        
+
         // Clear current instance containers
         this.#container.clear();
         this.#bindings.clear();
         this.#subModules.length = 0;
+        this.#resolving.clear();
+        this.#pendingProxies.clear();
+        this.#resolutionStack.length = 0;
     }
 }
 
 // Export for both CommonJS and ES modules
-export { DI, DILiteral, DIFactory, Token };
+export {DI, DILiteral, DIFactory, Token};

@@ -11,6 +11,44 @@ export type Dependency =
 export type BindingFunc<T> = (di: DI) => T;
 
 /**
+ * Describes which dependency shapes are acceptable for a single constructor parameter of type `T`.
+ *
+ * - `ClassConstructor<T>` — inject a class whose instance type is `T` (only valid when `T extends object`)
+ * - `Token<T>` — a typed Token wrapping a binding of type `T`
+ * - `DILiteral<T>` — a literal value of type `T` (use `di.literal(value)` or `DI.literal(value)`)
+ * - `DIFactory<T>` — a factory function returning `T` (use `di.factory(fn)` or `DI.factory(fn)`)
+ * - `string` / `Symbol` — named binding escape hatches; type-unsafe per position but always accepted
+ */
+export type DependencyFor<T> =
+  | (T extends object ? ClassConstructor<T> : never)
+  | Token<T>
+  | DILiteral<T>
+  | DIFactory<T>
+  | string
+  | Symbol;
+
+/**
+ * Maps a constructor-parameter tuple to a same-length dependency tuple where each slot only
+ * accepts a dependency that is compatible with the corresponding parameter type.
+ *
+ * Both array-length mismatches and per-position type mismatches become TypeScript compile errors
+ * when this type is used in a `bind` overload.
+ *
+ * @example
+ * ```typescript
+ * class C { constructor(a: A, n: number) {} }
+ *
+ * // DependenciesFor<[A, number]> resolves to:
+ * // [DependencyFor<A>, DependencyFor<number>]
+ * // i.e. [ClassConstructor<A> | Token<A> | DILiteral<A> | DIFactory<A> | string | Symbol,
+ * //        Token<number> | DILiteral<number> | DIFactory<number> | string | Symbol]
+ * ```
+ */
+export type DependenciesFor<Params extends readonly unknown[]> = {
+  [K in keyof Params]: DependencyFor<Params[K]>;
+};
+
+/**
  * A Token class for binding injectables
  */
 export class Token<T> {
@@ -332,6 +370,42 @@ export class DI {
   static token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
   /**
+   * Globally enable or disable automatic circular-dependency resolution for **all** `DI` instances.
+   *
+   * When `true`, every `DI` instance will detect dependency cycles at resolution time and
+   * transparently create a lazy `Proxy` only for the binding that is caught in the cycle —
+   * no `lateResolve` flag is needed on any binding. The `lateResolve` option is silently
+   * ignored while this global flag is active.
+   *
+   * The global flag takes **precedence** over the instance-level
+   * `autoResolveCircularDependencies()` method: if the global flag is `true`, every instance
+   * behaves as if its own flag is also `true`, regardless of the instance-level setting.
+   *
+   * When both flags are `false` (the default), and a circular dependency is detected,
+   * `get()` throws a descriptive error listing the full dependency chain and instructions
+   * on how to resolve it.
+   *
+   * @param enabled pass `true` to activate global auto-resolution, `false` to deactivate
+   * @example
+   * ```javascript
+   * class A { constructor(b) { this.b = b; } }
+   * class B { constructor(a) { this.a = a; } }
+   *
+   * DI.autoResolveCircularDependencies(true);
+   *
+   * const di = new DI();
+   * di.bind(A, () => new A(di.get(B)));
+   * di.bind(B, () => new B(di.get(A)));
+   *
+   * const a = di.get(A); // resolves without lateResolve
+   * console.log(a.b instanceof B); // true
+   *
+   * DI.autoResolveCircularDependencies(false); // restore default
+   * ```
+   */
+  static autoResolveCircularDependencies(enabled: boolean): void;
+
+  /**
    * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
    * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
    * This method is the same as calling `DI.literal` rather than using the instance
@@ -436,6 +510,43 @@ export class DI {
   token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
   /**
+   * Enable or disable automatic circular-dependency resolution for **this** `DI` instance.
+   *
+   * When `true`, this instance will detect dependency cycles at resolution time and
+   * transparently create a lazy `Proxy` only for the binding caught in the cycle —
+   * no `lateResolve` flag is needed. The `lateResolve` option is silently ignored while
+   * this flag (or the global one) is active.
+   *
+   * **Priority order:**
+   * 1. `DI.autoResolveCircularDependencies(true)` — global flag; overrides every instance.
+   * 2. `instance.autoResolveCircularDependencies(true)` — applies to this instance only.
+   * 3. `lateResolve: true` on a binding — manual opt-in for specific bindings.
+   * 4. Default — circular dependencies throw a descriptive error listing the full chain.
+   *
+   * Returns `this` to allow chaining.
+   *
+   * @param enabled pass `true` to activate auto-resolution on this instance, `false` to deactivate
+   * @returns this
+   * @example
+   * ```javascript
+   * class A { constructor(b) { this.b = b; } }
+   * class B { constructor(a) { this.a = a; } }
+   *
+   * const di = new DI();
+   * di.autoResolveCircularDependencies(true);
+   * di.bind(A, () => new A(di.get(B)));
+   * di.bind(B, () => new B(di.get(A)));
+   *
+   * const a = di.get(A); // resolves without lateResolve
+   * console.log(a.b instanceof B); // true
+   *
+   * // Another instance is unaffected
+   * const di2 = new DI(); // auto mode is off here
+   * ```
+   */
+  autoResolveCircularDependencies(enabled: boolean): this;
+
+  /**
    * Get the binding for the injectable if available otherwise return undefined
    * The binding consists of its parameters and a resolving function for returning the instance
    * Only known parameters are returned
@@ -456,7 +567,17 @@ export class DI {
   has<T>(injectable: InjectableOrToken<T>): boolean;
 
   /**
-   * Get an instance for the previously class binding
+   * Get an instance for the previously class binding.
+   *
+   * **Circular dependency handling** — three strategies are available, applied in priority order:
+   * 1. **Auto mode** (`DI.autoResolveCircularDependencies(true)` or `instance.autoResolveCircularDependencies(true)`)
+   *    — cycles are detected at runtime; only the binding caught in the cycle receives a lazy `Proxy`.
+   *    No `lateResolve` flag needed on any binding.
+   * 2. **Manual `lateResolve`** — mark one binding with `{ lateResolve: true }` to break the cycle with a `Proxy`
+   *    (ignored when auto mode is active).
+   * 3. **Neither** — if a cycle is encountered, `get()` throws immediately with a descriptive error that lists the
+   *    full dependency chain (e.g. `"Circular dependency detected: A → B → A"`) and instructions on how to fix it.
+   *
    * @param injectable an injectable class or a string key-value used for the binding
    * @returns an instance of T
    *
@@ -761,6 +882,45 @@ export class DI {
   getResolver<T>(injectable: InjectableOrToken<T>): DIResolver<T>;
 
   /**
+   * Bind a class or another constructable object so it can be fetched later.
+   * The binding method is generated automatically from the injectable and array of dependencies.
+   *
+   * **Typed overload** — when `injectable` is a concrete class (not a Token or string key), TypeScript
+   * infers the constructor-parameter types and validates each slot in `dependencies` against the
+   * corresponding parameter type via `DependenciesFor`. Both the array length and the per-position
+   * types are checked at compile time.
+   *
+   * Each dependency slot accepts:
+   * - The class itself (for object-type params)
+   * - A `Token<T>` wrapping the expected type
+   * - `DI.literal(value)` / `di.literal(value)` — a `DILiteral<T>` with matching value type
+   * - `DI.factory(fn)` / `di.factory(fn)` — a `DIFactory<T>` returning the expected type
+   * - A `string` or `Symbol` named binding (escape hatch — accepted in every slot but type-unsafe)
+   *
+   * @param injectable a constructable class whose constructor parameter types drive the dependency check
+   * @param dependencies a tuple of dependencies, one per constructor parameter, in the same order
+   * @param opts.isSingleton optional; `true` by default
+   * @param opts.lateResolve optional; defers instantiation until first property access (Proxy). Ignored in auto mode.
+   * @returns this
+   *
+   * @example
+   * ```typescript
+   * class A { constructor(public n: number) {} }
+   * class B { constructor(public a: A, public label: string) {} }
+   *
+   * const di = new DI();
+   * di.bind(A, [di.literal(5)]);          // ✓  DILiteral<number> matches `number`
+   * di.bind(B, [A, di.literal('hello')]); // ✓  ClassConstructor<A> + DILiteral<string>
+   * di.bind(B, [di.literal(5), A]);       // ✗  compile error — wrong types in wrong slots
+   * di.bind(B, [A]);                      // ✗  compile error — too few dependencies
+   * ```
+   */
+  bind<T extends object, Args extends readonly unknown[]>(
+    injectable: (new (...args: [...Args]) => T) | Token<T>,
+    dependencies: DependenciesFor<Args>,
+    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+  ): this;
+  /**
    * Bind a class or another constructable object so it can be fetched later
    * The binding method is generated automatically from the injectable and array of dependencies
    * Passing a non constructable class or function along an array of dependencies will throw an error. Tokens are acceptable though
@@ -768,7 +928,11 @@ export class DI {
    * @param injectable an injectable class used for the binding. Must be a constructable class or function
    * @param dependencies array of dependencies to be used when instanciating the injectable. The most be specified at the same order that the constructor parameters
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
-   * @param opts.lateResolve optional param to specify that this injectable should be resolved later. This means that instanciation will happen later when it is used. This avoids circular dependency problems. It is false by default
+   * @param opts.lateResolve optional param to defer instantiation of this injectable until the first time a property is accessed on it.
+   * When `true`, a transparent `Proxy` is stored in the container immediately and the real instance is created on first access.
+   * This is the manual opt-in for breaking circular dependencies. It is `false` by default.
+   * **Note:** this flag is silently ignored when `autoResolveCircularDependencies` is enabled (globally or on this instance) —
+   * in that mode cycles are detected automatically and only the binding actually caught in the cycle receives a Proxy.
    * @returns this
    *
    * @example
@@ -799,7 +963,11 @@ export class DI {
    * @param injectable an injectable class or a string key-value used for the binding
    * @param func the function called when it should instanciate the object
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
-   * @param opts.lateResolve optional param to specify that this injectable should be resolved later. This means that instanciation will happen later when it is used. This avoids circular dependency problems. It is false by default
+   * @param opts.lateResolve optional param to defer instantiation of this injectable until the first time a property is accessed on it.
+   * When `true`, a transparent `Proxy` is stored in the container immediately and the real instance is created on first access.
+   * This is the manual opt-in for breaking circular dependencies. It is `false` by default.
+   * **Note:** this flag is silently ignored when `autoResolveCircularDependencies` is enabled (globally or on this instance) —
+   * in that mode cycles are detected automatically and only the binding actually caught in the cycle receives a Proxy.
    * @returns this
    *
    * @example
