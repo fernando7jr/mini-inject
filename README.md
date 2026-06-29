@@ -517,6 +517,39 @@ di.get('A'); // Throws 'No binding for injectable "A"'
 di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 ````
 
+### Containers
+
+The `Container` concept allows you to bind multiple injectables into a single key, and when retrieved, it resolves into an array of all the elements that were bound. Each bound element preserves its own specific configuration (like `isSingleton`, `lateResolve`, or `eager`).
+
+By default, binding to the same injectable multiple times overrides the previous binding. `Container` alters this behavior to accumulate them instead.
+
+```javascript
+class PluginA {}
+class PluginB {}
+class PluginC {}
+
+const di = new DI();
+const plugins = di.container('plugins'); // Creates a Container reference
+
+// You can pass the injectables directly to the container if they are bound
+di.bind(PluginA, []);
+di.bind(PluginB, []);
+
+di.bind(plugins, PluginA, { isSingleton: true });
+di.bind(plugins, PluginB, { isSingleton: false });
+
+// You can also pass factories or use regular dependencies array
+di.bind(plugins, () => new PluginC(), { isSingleton: true });
+
+// Getting a container returns an array with all the resolved instances!
+const list = di.get(plugins);
+console.log(list.length); // 3
+console.log(list[0] instanceof PluginA); // true
+console.log(list[1] instanceof PluginB); // true
+```
+
+The options parameter on `bind` also supports the `eager: boolean` flag. When set to `true`, `mini-inject` will instantiate the binding immediately after registration rather than waiting for the first `.get()` call. Note that this flag is expected to eventually replace the usage of manual `lateResolve` flags by encouraging early validation of the dependency tree.
+
 ### Dependency Graph Analyzer
 
 `mini-inject` can generate a dependency graph for any DI module so you can understand the full dependency tree, spot potential optimisations, and detect circular dependencies before they cause problems at runtime.
@@ -619,6 +652,15 @@ npx mini-inject analyze ./src/container.js --export=appDI
 ```
 
 ## Changelog
+
+#### 1.13.0
+
+* Added `Container` class — allows binding multiple injectables, factories, or tokens to a single container reference. When resolved, the container returns an array containing all resolved items.
+* Individual container items retain their own configuration (e.g., `isSingleton`, `lateResolve`, `eager`).
+* Improved `getAll` TypeScript typings using conditional resolution, accurately returning `T[]` when resolving a `Container<T>` while maintaining inference and backwards compatibility for existing tuple bindings.
+* Officially documented the `eager: boolean` flag in both JSDoc and `README.md`, which is intended to eventually replace manual `lateResolve` flags.
+* Container dependencies natively support resolving custom factory functions `(di) => T` for inline configurations.
+* Updated `DependencyGraph` module to identify and report `Container` contents and their corresponding downstream dependencies.
 
 #### 1.12.0
 
