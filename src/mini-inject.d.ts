@@ -10,6 +10,64 @@ export type Dependency =
   | DIFactory<any>;
 export type BindingFunc<T> = (di: DI) => T;
 
+// ─── Dependency graph ────────────────────────────────────────────────────────
+
+/** A single dependency descriptor inside a graph node's `deps` array. */
+export type DepDescriptor =
+  | { type: "injectable"; key: string }
+  | { type: "literal"; value: unknown }
+  | { type: "factory"; name: string | null };
+
+/**
+ * A node in the dependency graph — one per binding registered in the DI module.
+ * Nodes whose binding was declared with a custom factory function have `deps: null`
+ * because the dependencies cannot be statically determined.
+ */
+export interface GraphNode {
+  /** Human-readable display key (class name, string key, or `Token<description>`). */
+  key: string;
+  isSingleton: boolean;
+  lateResolve: boolean;
+  /** `true` when the binding originates from an attached sub-module. */
+  isSubModule: boolean;
+  /**
+   * Dependency descriptors for each position in the binding's dependency list.
+   * `null` means the binding was declared with a custom factory function and the
+   * dependencies cannot be statically determined.
+   */
+  deps: DepDescriptor[] | null;
+}
+
+/** A directed edge between two injectable nodes in the dependency graph. */
+export interface GraphEdge {
+  from: string;
+  to: string;
+  /** `true` when this edge is part of at least one circular-dependency cycle. */
+  isCircular: boolean;
+}
+
+/** Full dependency graph returned by `DI.getDependencyGraph()`. */
+export interface DependencyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /**
+   * Each cycle is an array of display keys where the first key is repeated at
+   * the end to make the loop explicit, e.g. `["A", "B", "A"]`.
+   */
+  cycles: string[][];
+}
+
+/** Options for `formatDependencyGraph`. */
+export interface FormatGraphOptions {
+  /**
+   * When `true` (default), a title line and a cycles summary section are
+   * included in the output. Pass `false` to get rows only.
+   */
+  header?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Describes which dependency shapes are acceptable for a single constructor parameter of type `T`.
  *
@@ -253,6 +311,9 @@ export class DILiteral<T> {
  */
 export class DIFactory<T> {
   private constructor(fn: (di: DIGetter) => T);
+
+  /** The name of the wrapped factory function, or `null` if it is anonymous. */
+  readonly name: string | null;
 
   get(di: DIGetter): T;
 }
@@ -545,6 +606,42 @@ export class DI {
    * ```
    */
   autoResolveCircularDependencies(enabled: boolean): this;
+
+  /**
+   * Build a dependency graph for this DI module (and any attached sub-modules).
+   *
+   * Bindings declared with an array of dependencies are fully described.
+   * Bindings declared with a custom factory function have `deps: null` because
+   * the dependencies cannot be statically determined at analysis time.
+   *
+   * The graph can be serialised directly with `JSON.stringify` for JSON output.
+   */
+  getDependencyGraph(): DependencyGraph;
+
+  /**
+   * Build a dependency graph for the given DI module.
+   * Convenience static wrapper around the instance method.
+   * @param di The DI instance to analyse.
+   */
+  static getDependencyGraph(di: DI): DependencyGraph;
+
+  /**
+   * Render the dependency graph of this module as a human-readable text report.
+   * @param opts Optional formatting options (e.g. `{ header: false }`).
+   */
+  formatDependencyGraph(opts?: FormatGraphOptions): string;
+
+  /**
+   * Render a pre-computed `DependencyGraph` as a human-readable text report.
+   * Useful when you have already obtained the graph object and want to format it
+   * separately — for example after enriching or filtering it.
+   * @param graph A graph previously returned by `getDependencyGraph`.
+   * @param opts Optional formatting options.
+   */
+  static formatDependencyGraph(
+    graph: DependencyGraph,
+    opts?: FormatGraphOptions,
+  ): string;
 
   /**
    * Get the binding for the injectable if available otherwise return undefined
@@ -918,7 +1015,7 @@ export class DI {
   bind<T extends object, Args extends readonly unknown[]>(
     injectable: (new (...args: [...Args]) => T) | Token<T>,
     dependencies: DependenciesFor<Args>,
-    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -956,7 +1053,7 @@ export class DI {
   bind<T>(
     injectable: ClassConstructor<T> | Token<T>,
     dependencies: Dependency[],
-    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -991,7 +1088,7 @@ export class DI {
   bind<T>(
     injectable: InjectableOrToken<T>,
     func: BindingFunc<T>,
-    opts?: { isSingleton?: boolean; lateResolve?: boolean },
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
    * Bind a class or another constructable object so it can be fetched later
@@ -1020,6 +1117,68 @@ export class DI {
    *
    */
   bind<T>(injectable: ClassConstructor<T> | Token<T>): this;
+
+  /**
+   * Remove the binding (and its cached singleton instance, if any) for a single injectable.
+   * If the cached instance exposes a `dispose()` method, it is called before the instance
+   * is removed from the container — giving it a chance to release resources (timers, connections, etc.).
+   * Errors thrown by `dispose()` are silently ignored.
+   *
+   * Has no effect when the injectable has no binding.
+   *
+   * @param injectable an injectable class, string key, Symbol, or Token
+   * @returns this
+   * @example
+   * ```javascript
+   * class DbConnection {
+   *   constructor() { this.open = true; }
+   *   dispose() { this.open = false; }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(DbConnection, []);
+   *
+   * const conn = di.get(DbConnection);
+   * console.log(conn.open); // true
+   *
+   * di.unbind(DbConnection);
+   * console.log(conn.open);          // false  — dispose() was called
+   * console.log(di.has(DbConnection)); // false  — binding removed
+   * ```
+   */
+  unbind<T>(injectable: InjectableOrToken<T>): this;
+
+  /**
+   * Create a fork (child scope) of this DI instance.
+   *
+   * A fork is a fresh `DI` that delegates any unresolved key upward to its parent:
+   * - Bindings registered **on the fork** are local to the fork and override the parent.
+   * - Bindings registered **on the parent** are transparently resolved through the parent,
+   *   returning the parent's cached singleton instance (so singletons are shared).
+   * - The parent is **never** affected by `clear()` or `unbind()` on the fork.
+   * - The fork can itself be forked, creating a chain of scopes.
+   *
+   * This is the primary pattern for per-request or per-test scoping:
+   *
+   * ```javascript
+   * const appDI = new DI();
+   * appDI.bind(DbPool, []);              // singleton, shared across all forks
+   * appDI.bind(UserRepo, [DbPool]);      // singleton, shared
+   *
+   * // per HTTP request:
+   * const reqDI = appDI.fork();
+   * reqDI.bind(RequestContext, () => new RequestContext(req));
+   * reqDI.bind(OrderService, [UserRepo, RequestContext]);
+   *
+   * const svc = reqDI.get(OrderService); // UserRepo resolved from parent (shared)
+   *
+   * // end of request — only the fork's local singletons are disposed:
+   * reqDI.clear();
+   * ```
+   *
+   * @returns A new `DI` instance whose parent is `this`.
+   */
+  fork(): DI;
 
   /**
    * Add a sub-module to this. When resolving dependencies it will also search in the sub-modules.
@@ -1115,6 +1274,9 @@ export class DI {
   /**
    * Clears all containers, bindings, and sub-modules from this DI instance.
    * This method also recursively clears all sub-modules.
+   * Before removing each cached singleton instance, `dispose()` is called on it if the method
+   * exists — giving services a chance to release resources (timers, connections, etc.).
+   * Errors thrown by `dispose()` are silently ignored.
    * After calling clear(), the DI instance will be in a clean state as if it was just created.
    * @returns void
    * @example

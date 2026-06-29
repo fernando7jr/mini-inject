@@ -374,6 +374,87 @@ sub2.bind(A);
 sub2.get(Sub2D); // Sub2D
 ```
 
+### Forking (Scoped Containers)
+
+`di.fork()` creates a child `DI` instance that inherits all of its parent's bindings while keeping its own isolated scope.
+
+Resolution priority inside a fork:
+1. The fork's own local bindings
+2. The fork's sub-modules
+3. The parent (transparently, up the chain)
+
+Parent singletons are **shared** — resolving a parent-bound singleton from a fork returns the same cached instance that the parent holds. Local fork bindings never affect the parent.
+
+This is the primary pattern for per-request scoping in servers, or for test isolation where you want to override a handful of bindings without rebuilding the full container:
+
+```javascript
+const {DI} = require('mini-inject');
+
+class DbPool {
+    query(sql) { return `result of: ${sql}`; }
+}
+class UserRepo {
+    constructor(db) { this.db = db; }
+    findUser(id) { return this.db.query(`SELECT * FROM users WHERE id=${id}`); }
+}
+class RequestContext {
+    constructor(req) { this.userId = req.headers['x-user-id']; }
+}
+class OrderService {
+    constructor(userRepo, ctx) {
+        this.userRepo = userRepo;
+        this.ctx = ctx;
+    }
+    currentUserOrders() { return this.userRepo.findUser(this.ctx.userId); }
+}
+
+// Application-level container — set up once at startup
+const appDI = new DI();
+appDI.bind(DbPool, []);
+appDI.bind(UserRepo, [DbPool]);
+
+// Per-request fork — created and cleared on every request
+const req = {headers: {'x-user-id': '42'}};
+const reqDI = appDI.fork();
+reqDI.bind(RequestContext, () => new RequestContext(req));
+reqDI.bind(OrderService, [UserRepo, RequestContext]);
+
+const svc = reqDI.get(OrderService);
+console.log(svc.currentUserOrders()); // result of: SELECT * FROM users WHERE id=42
+
+// DbPool and UserRepo are shared — same instances as in appDI
+console.log(reqDI.get(DbPool) === appDI.get(DbPool)); // true
+
+// End of request — disposes only the fork's local singletons; appDI is untouched
+reqDI.clear();
+console.log(appDI.has(DbPool)); // true
+```
+
+Forks can also be used to isolate tests without rebuilding the entire application container:
+
+```javascript
+// production container
+const appDI = new DI();
+appDI.bind(DbPool, []);
+appDI.bind(UserRepo, [DbPool]);
+appDI.bind(OrderService, [UserRepo]);
+
+// test — replace only what needs to change
+const testDI = appDI.fork();
+testDI.bind(DbPool, () => new FakeDbPool()); // override
+
+const svc = testDI.get(OrderService); // OrderService → UserRepo → FakeDbPool
+```
+
+Forks can be nested as deep as needed:
+
+```javascript
+const rootDI  = new DI();   // global singletons
+const scopeDI = rootDI.fork();  // request scope
+const childDI = scopeDI.fork(); // sub-scope (e.g. a transaction)
+// childDI sees all of scopeDI's and rootDI's bindings
+```
+
 ### Tokens
 
 The Token is an alternative when the developer wants more control for how the binding keys are generated.
@@ -436,7 +517,122 @@ di.get('A'); // Throws 'No binding for injectable "A"'
 di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
 ````
 
+### Dependency Graph Analyzer
+
+`mini-inject` can generate a dependency graph for any DI module so you can understand the full dependency tree, spot potential optimisations, and detect circular dependencies before they cause problems at runtime.
+
+#### Programmatic API
+
+```javascript
+const {DI} = require('mini-inject');
+
+class AuthService {}
+class UserService {}
+class OrderService {}
+class NotificationService {}
+
+const di = new DI();
+di.bind(AuthService, []);
+di.bind(UserService, [AuthService]);
+di.bind(OrderService, [UserService, AuthService]);
+di.bind(NotificationService, () => new NotificationService()); // custom factory
+
+// Get a serialisable graph object
+const graph = di.getDependencyGraph();
+// { nodes: [...], edges: [...], cycles: [] }
+console.log(JSON.stringify(graph, null, 2));
+
+// Or get a formatted text report (header is shown by default)
+console.log(di.formatDependencyGraph());
+// mini-inject dependency graph — 4 binding(s), 0 cycle(s)
+// ═══════════════════════════════════════════════════════
+//
+// AuthService           [singleton]
+// UserService           [singleton]               AuthService
+// OrderService          [singleton]               UserService, AuthService
+// NotificationService   [singleton]               (custom initializer - unknown deps)
+
+// Without the header/summary section
+console.log(di.formatDependencyGraph({header: false}));
+
+// Static variants accept a pre-computed graph
+const graph2 = DI.getDependencyGraph(di);
+const text2  = DI.formatDependencyGraph(graph2, {header: false});
+```
+
+Circular dependencies are detected and reported without throwing — they are valid when resolved via `lateResolve: true` or `autoResolveCircularDependencies`:
+
+```javascript
+class A {}
+class B {}
+
+const di = new DI();
+di.bind(A, [B]);
+di.bind(B, [A], {lateResolve: true});
+
+console.log(di.formatDependencyGraph());
+// mini-inject dependency graph — 2 binding(s), 1 cycle(s)
+// ══════════════════════════════════════════════════════
+//
+// A   [singleton]               B  ⚠ CYCLE: A → B → A
+// B   [singleton]  lateResolve  A  ⚠ CYCLE: A → B → A
+//
+// Cycles detected:
+//   [1] A → B → A
+```
+
+The `nodes` array describes each binding:
+
+| Field | Type | Description |
+|---|---|---|
+| `key` | `string` | Display name (`"MyClass"`, `"myKey"`, `"Token<desc>"`) |
+| `isSingleton` | `boolean` | Whether the binding is a singleton |
+| `lateResolve` | `boolean` | Whether `lateResolve: true` is set on this binding |
+| `isSubModule` | `boolean` | `true` when the binding comes from an attached sub-module |
+| `deps` | `DepDescriptor[] \| null` | Dep list, or `null` when a custom factory function was used |
+
+Each `DepDescriptor` is one of:
+- `{ type: 'injectable', key: string }` — another registered injectable
+- `{ type: 'literal', value: unknown }` — a `DI.literal(...)` value
+- `{ type: 'factory', name: string | null }` — a `DI.factory(...)` function (anonymous when `name` is `null`)
+
+#### CLI
+
+```bash
+npx mini-inject analyze <path-to-file>
+```
+
+The file must export a `DI` instance — either as `export default di` (ESM), `module.exports = di` (CJS), or as a named export.
+
+```bash
+# Default: text format with header
+npx mini-inject analyze ./src/container.js
+
+# JSON output (pipe-friendly)
+npx mini-inject analyze ./src/container.js --format=json
+
+# Plain rows, no title or cycles summary
+npx mini-inject analyze ./src/container.js --no-header
+
+# When multiple DI instances are exported, pick one by name
+npx mini-inject analyze ./src/container.js --export=appDI
+```
+
 ## Changelog
+
+#### 1.12.0
+
+* Added `di.fork()` — creates a child `DI` instance that delegates unresolved keys to its parent; parent singletons are shared, fork-local bindings stay isolated, and `clear()` on the fork never touches the parent. Supports arbitrary fork depth
+* Added `di.unbind(injectable)` — removes a single binding and its cached singleton instance; calls `dispose()` on the instance if the method exists, then removes both the binding and the cached value
+* Added `{ eager: true }` option to `bind()` — when set on a singleton binding, the instance is created immediately at bind time instead of lazily on first `get()`; silently ignored for transient bindings
+* `clear()` now calls `dispose()` on every cached singleton instance (and on sub-module instances recursively) before wiping the container, giving services a chance to release resources; errors thrown by `dispose()` are silently ignored
+* Added `di.getDependencyGraph()` / `DI.getDependencyGraph(di)` — returns a serialisable graph object (`{ nodes, edges, cycles }`) describing all registered bindings, their dependency descriptors, directed edges, and any detected circular-dependency cycles
+* Added `di.formatDependencyGraph(opts?)` / `DI.formatDependencyGraph(graph, opts?)` — renders a dependency graph as a human-readable text report; pass `{ header: false }` to suppress the title and cycles-summary section
+* Added `bin/analyze.mjs` CLI — run `npx mini-inject analyze <file>` to print a dependency report for any module that exports a `DI` instance; supports `--format=text|json`, `--export=<name>`, and `--no-header`
+* Dep descriptors distinguish between `injectable` keys, `Literal<value>`, `Factory<name>`, and `null` (custom factory function — deps cannot be statically determined)
+* Token keys are displayed as `Token<description>` in all outputs
+* Bindings from attached sub-modules are included in the graph and marked with `isSubModule: true`
+* New TypeScript types: `DepDescriptor`, `GraphNode`, `GraphEdge`, `DependencyGraph`, `FormatGraphOptions`
 
 #### 1.11.0
 

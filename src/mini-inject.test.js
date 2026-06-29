@@ -1014,4 +1014,579 @@ test('Should clear empty containers without errors', (t) => {
     t.true(di.has('service'));
     const instance = di.get('service');
     t.is(instance.value, 'test');
+
+});
+
+// ─── unbind ───────────────────────────────────────────────────────────────────
+
+test('unbind should remove binding and prevent further resolution', (t) => {
+    const di = new DI();
+    di.bind(A, [di.literal(1)]);
+    t.true(di.has(A));
+    di.unbind(A);
+    t.false(di.has(A));
+    t.throws(() => di.get(A));
+});
+
+test('unbind should call dispose on cached singleton instance', (t) => {
+    const di = new DI();
+    let disposed = false;
+    class MyService {
+        dispose() {disposed = true;}
+    }
+    di.bind(MyService, []);
+    di.get(MyService); // populate cache
+    t.false(disposed);
+    di.unbind(MyService);
+    t.true(disposed);
+    t.false(di.has(MyService));
+});
+
+test('unbind should not call dispose on non-singleton (not cached)', (t) => {
+    const di = new DI();
+    let disposed = false;
+    class MyService {
+        dispose() {disposed = true;}
+    }
+    di.bind(MyService, [], {isSingleton: false});
+    di.get(MyService); // not cached
+    di.unbind(MyService);
+    t.false(disposed);
+    t.false(di.has(MyService));
+});
+
+test('unbind on unknown injectable should be a no-op', (t) => {
+    const di = new DI();
+    t.notThrows(() => di.unbind(A));
+});
+
+test('unbind should return this for chaining', (t) => {
+    const di = new DI();
+    di.bind(A, [di.literal(1)]);
+    t.is(di.unbind(A), di);
+});
+
+// ─── dispose on clear ─────────────────────────────────────────────────────────
+
+test('clear should call dispose on all cached singleton instances', (t) => {
+    const di = new DI();
+    const disposedLog = [];
+    class ServiceX {
+        constructor(id) {this.id = id;}
+        dispose() {disposedLog.push(this.id);}
+    }
+    di.bind('x1', () => new ServiceX('x1'));
+    di.bind('x2', () => new ServiceX('x2'));
+    di.get('x1');
+    di.get('x2');
+    di.clear();
+    t.deepEqual(disposedLog.sort(), ['x1', 'x2']);
+});
+
+test('clear should not throw when dispose throws', (t) => {
+    const di = new DI();
+    class BadService {
+        dispose() {throw new Error('dispose error');}
+    }
+    di.bind(BadService, []);
+    di.get(BadService);
+    t.notThrows(() => di.clear());
+});
+
+test('clear should call dispose on sub-module cached instances', (t) => {
+    const disposedLog = [];
+    class SubService {
+        dispose() {disposedLog.push('sub');}
+    }
+    const sub = new DI();
+    sub.bind(SubService, []);
+    sub.get(SubService);
+
+    const di = new DI();
+    di.subModule(sub);
+    di.clear();
+    t.deepEqual(disposedLog, ['sub']);
+});
+
+// ─── eager binding ────────────────────────────────────────────────────────────
+
+test('eager bind should instantiate singleton immediately', (t) => {
+    let created = false;
+    class EagerService {
+        constructor() {created = true;}
+    }
+    const di = new DI();
+    t.false(created);
+    di.bind(EagerService, [], {eager: true});
+    t.true(created);
+});
+
+test('eager bind should use same singleton instance on subsequent get', (t) => {
+    let count = 0;
+    class Counter {
+        constructor() {this.id = ++count;}
+    }
+    const di = new DI();
+    di.bind(Counter, [], {eager: true});
+    t.is(count, 1);
+    const c = di.get(Counter);
+    t.is(count, 1); // not created again
+    t.is(c.id, 1);
+});
+
+test('eager bind with isSingleton false should not instantiate', (t) => {
+    let created = false;
+    class EagerTransient {
+        constructor() {created = true;}
+    }
+    const di = new DI();
+    di.bind(EagerTransient, [], {isSingleton: false, eager: true});
+    t.false(created); // eager is ignored for transients
+});
+
+test('eager bind with factory function', (t) => {
+    let created = false;
+    const di = new DI();
+    di.bind('eagerKey', () => {created = true; return {done: true};}, {eager: true});
+    t.true(created);
+    const val = di.get('eagerKey');
+    t.is(val.done, true);
+});
+
+// ─── fork ─────────────────────────────────────────────────────────────────────
+
+test('fork: parent bindings are visible in the fork', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(10)]);
+
+    const child = parent.fork();
+    const a = child.get(A);
+    t.truthy(a);
+    t.is(a.value, 10);
+});
+
+test('fork: parent singleton is reused in the fork (shared cache)', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(99)]);
+
+    const parentA = parent.get(A);
+    const child = parent.fork();
+    const childA = child.get(A);
+
+    t.is(parentA, childA); // same instance
+});
+
+test('fork: fork-local binding overrides parent for the fork only', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(1)]);
+
+    const child = parent.fork();
+    child.bind(A, [child.literal(42)]);
+
+    t.is(child.get(A).value, 42);  // fork's own
+    t.is(parent.get(A).value, 1);  // parent unchanged
+});
+
+test('fork: fork-local binding does not affect parent', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(1)]);
+
+    const child = parent.fork();
+    child.bind(B, [child.literal(5)]);
+
+    t.true(child.has(B));
+    t.false(parent.has(B)); // parent knows nothing about B
+});
+
+test('fork: factory in fork receives fork as di, can resolve parent bindings', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(5)]);
+
+    const child = parent.fork();
+    child.bind(C, (di) => new C(di.get(A), new B(2)));
+
+    const c = child.get(C);
+    t.is(c.a.value, 5);   // A resolved from parent through fork
+    t.is(c.b.value, 4);   // B(2) → value = 2 * 2 = 4
+});
+
+test('fork: clear() on fork does not affect parent', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(7)]);
+    const parentA = parent.get(A); // cache it
+
+    const child = parent.fork();
+    child.bind(B, [child.literal(3)]);
+    child.get(B);
+
+    child.clear();
+
+    t.false(child.has(B));           // fork-local binding gone
+    t.true(parent.has(A));           // parent unaffected
+    t.is(parent.get(A), parentA);   // parent singleton still intact
+});
+
+test('fork: clear() on fork, fork can still delegate to parent after clear', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(3)]);
+
+    const child = parent.fork();
+    child.bind(B, [child.literal(1)]);
+    child.clear();
+
+    // After clear, fork still knows its parent
+    const a = child.get(A);
+    t.is(a.value, 3);
+});
+
+test('fork: has() returns true for parent bindings', (t) => {
+    const parent = new DI();
+    parent.bind(A, [parent.literal(1)]);
+
+    const child = parent.fork();
+    t.true(child.has(A));
+});
+
+test('fork: fallback works when neither fork nor parent have a binding', (t) => {
+    const parent = new DI();
+    const child = parent.fork();
+
+    const result = child.get(D, 'fallback');
+    t.is(result, 'fallback');
+});
+
+test('fork: fork of a fork (multi-level scoping)', (t) => {
+    const root = new DI();
+    root.bind(A, [root.literal(1)]);
+
+    const mid = root.fork();
+    mid.bind(B, [mid.literal(2)]);
+
+    const leaf = mid.fork();
+    leaf.bind(C, (di) => new C(di.get(A), di.get(B)));
+
+    const c = leaf.get(C);
+    t.is(c.a.value, 1); // from root
+    t.is(c.b.value, 4); // from mid: B(2) → value = 2*2 = 4
+});
+
+test('fork: dispose is called on fork-local singletons only on clear', (t) => {
+    const disposedLog = [];
+    class Resource {
+        constructor(name) {
+            this.name = name;
+        }
+        dispose() {
+            disposedLog.push(this.name);
+        }
+    }
+
+    const parent = new DI();
+    parent.bind('root-res', () => new Resource('root'));
+    parent.get('root-res'); // cache in parent
+
+    const child = parent.fork();
+    child.bind('fork-res', () => new Resource('fork'));
+    child.get('fork-res'); // cache in fork
+
+    child.clear();
+
+    t.deepEqual(disposedLog, ['fork']); // only fork-local disposed
+    t.is(parent.get('root-res').name, 'root'); // parent's instance still alive
+});
+
+// ─── getDependencyGraph ───────────────────────────────────────────────────────
+
+test('getDependencyGraph: basic graph with no cycles', (t) => {
+    class Svc1 {}
+    class Svc2 {}
+    class Svc3 {}
+
+    const di = new DI();
+    di.bind(Svc1, []);
+    di.bind(Svc2, []);
+    di.bind(Svc3, [Svc1, Svc2]);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 3);
+    t.is(graph.edges.length, 2);
+    t.is(graph.cycles.length, 0);
+
+    const n1 = graph.nodes.find((n) => n.key === 'Svc1');
+    t.deepEqual(n1.deps, []);
+    t.true(n1.isSingleton);
+    t.false(n1.lateResolve);
+    t.false(n1.isSubModule);
+
+    const n3 = graph.nodes.find((n) => n.key === 'Svc3');
+    t.deepEqual(n3.deps, [
+        {type: 'injectable', key: 'Svc1'},
+        {type: 'injectable', key: 'Svc2'},
+    ]);
+
+    const edgeSvc3Svc1 = graph.edges.find((e) => e.from === 'Svc3' && e.to === 'Svc1');
+    t.truthy(edgeSvc3Svc1);
+    t.false(edgeSvc3Svc1.isCircular);
+});
+
+test('getDependencyGraph: custom factory is marked unknown deps', (t) => {
+    class SvcA {}
+
+    const di = new DI();
+    di.bind(SvcA, () => new SvcA());
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 1);
+    t.is(graph.nodes[0].deps, null);
+    t.is(graph.edges.length, 0);
+});
+
+test('getDependencyGraph: detects circular dependency and marks edges', (t) => {
+    class NodeA {}
+    class NodeB {}
+
+    const di = new DI();
+    di.bind(NodeA, [NodeB]);
+    di.bind(NodeB, [NodeA], {lateResolve: true});
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 2);
+    t.is(graph.cycles.length, 1);
+    t.deepEqual(graph.cycles[0], ['NodeA', 'NodeB', 'NodeA']);
+
+    const edgeAB = graph.edges.find((e) => e.from === 'NodeA' && e.to === 'NodeB');
+    t.true(edgeAB.isCircular);
+
+    const edgeBA = graph.edges.find((e) => e.from === 'NodeB' && e.to === 'NodeA');
+    t.true(edgeBA.isCircular);
+
+    const nodeB = graph.nodes.find((n) => n.key === 'NodeB');
+    t.true(nodeB.lateResolve);
+});
+
+test('getDependencyGraph: handles the A,B,C,D,E scenario', (t) => {
+    class SA {}
+    class SB {}
+    class SC {}
+    class SD {}
+    class SE {}
+
+    const di = new DI();
+    di.bind(SA, [SB]);
+    di.bind(SB, [SA], {lateResolve: true});
+    di.bind(SC, [SA, SB]);
+    di.bind(SD, [SA]);
+    di.bind(SE, [SD, SC, SB]);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 5);
+    t.is(graph.cycles.length, 1);
+    t.deepEqual(graph.cycles[0], ['SA', 'SB', 'SA']);
+
+    // Non-circular edges
+    const edgeCtoA = graph.edges.find((e) => e.from === 'SC' && e.to === 'SA');
+    t.false(edgeCtoA.isCircular);
+
+    const edgeEtoD = graph.edges.find((e) => e.from === 'SE' && e.to === 'SD');
+    t.false(edgeEtoD.isCircular);
+
+    // Circular edges
+    const edgeAtoB = graph.edges.find((e) => e.from === 'SA' && e.to === 'SB');
+    t.true(edgeAtoB.isCircular);
+});
+
+test('getDependencyGraph: Token keys are displayed as Token<description>', (t) => {
+    class TokenSvc {}
+
+    const di = new DI();
+    const tok = DI.token(TokenSvc, 'myToken');
+    di.bind(tok, []);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 1);
+    t.is(graph.nodes[0].key, 'Token<myToken>');
+});
+
+test('getDependencyGraph: literal and factory deps are described correctly', (t) => {
+    class SvcWithMixedDeps {}
+
+    function namedFactory() {
+        return 42;
+    }
+
+    const di = new DI();
+    di.bind(SvcWithMixedDeps, [DI.literal(true), DI.factory(namedFactory)]);
+
+    const graph = di.getDependencyGraph();
+    const node = graph.nodes[0];
+
+    t.deepEqual(node.deps, [
+        {type: 'literal', value: true},
+        {type: 'factory', name: 'namedFactory'},
+    ]);
+    // No edges since neither dep is an injectable node
+    t.is(graph.edges.length, 0);
+});
+
+test('getDependencyGraph: anonymous factory dep has name null', (t) => {
+    class SvcAnon {}
+
+    const di = new DI();
+    di.bind(SvcAnon, [DI.factory(() => 99)]);
+
+    const graph = di.getDependencyGraph();
+    const node = graph.nodes[0];
+
+    t.is(node.deps[0].type, 'factory');
+    t.is(node.deps[0].name, null);
+});
+
+test('getDependencyGraph: submodule bindings are marked isSubModule=true', (t) => {
+    class MainSvc {}
+    class SubSvc {}
+
+    const sub = new DI();
+    sub.bind(SubSvc, []);
+
+    const di = new DI();
+    di.bind(MainSvc, [SubSvc]);
+    di.subModule(sub);
+
+    const graph = di.getDependencyGraph();
+
+    t.is(graph.nodes.length, 2);
+
+    const mainNode = graph.nodes.find((n) => n.key === 'MainSvc');
+    t.false(mainNode.isSubModule);
+
+    const subNode = graph.nodes.find((n) => n.key === 'SubSvc');
+    t.true(subNode.isSubModule);
+
+    // Edge still present even though SubSvc is from a submodule
+    const edge = graph.edges.find((e) => e.from === 'MainSvc' && e.to === 'SubSvc');
+    t.truthy(edge);
+});
+
+test('getDependencyGraph: static method delegates to instance method', (t) => {
+    class SvcS {}
+
+    const di = new DI();
+    di.bind(SvcS, []);
+
+    const instanceGraph = di.getDependencyGraph();
+    const staticGraph = DI.getDependencyGraph(di);
+
+    t.deepEqual(instanceGraph, staticGraph);
+});
+
+test('getDependencyGraph: non-singleton bindings are marked correctly', (t) => {
+    class TransientSvc {}
+
+    const di = new DI();
+    di.bind(TransientSvc, [], {isSingleton: false});
+
+    const graph = di.getDependencyGraph();
+    const node = graph.nodes[0];
+
+    t.false(node.isSingleton);
+});
+
+// ─── formatDependencyGraph ────────────────────────────────────────────────────
+
+test('formatDependencyGraph: includes header by default', (t) => {
+    class HSvc {}
+
+    const di = new DI();
+    di.bind(HSvc, []);
+
+    const text = di.formatDependencyGraph();
+
+    t.true(text.includes('mini-inject dependency graph'));
+    t.true(text.includes('1 binding(s)'));
+    t.true(text.includes('0 cycle(s)'));
+});
+
+test('formatDependencyGraph: header can be disabled', (t) => {
+    class NoHSvc {}
+
+    const di = new DI();
+    di.bind(NoHSvc, []);
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.false(text.includes('mini-inject dependency graph'));
+});
+
+test('formatDependencyGraph: shows cycle warning on affected rows', (t) => {
+    class CycA {}
+    class CycB {}
+
+    const di = new DI();
+    di.bind(CycA, [CycB]);
+    di.bind(CycB, [CycA], {lateResolve: true});
+
+    const text = di.formatDependencyGraph();
+
+    t.true(text.includes('⚠ CYCLE:'));
+    t.true(text.includes('CycA → CycB → CycA'));
+    t.true(text.includes('Cycles detected:'));
+    t.true(text.includes('[1]'));
+});
+
+test('formatDependencyGraph: shows lateResolve tag', (t) => {
+    class LRA {}
+    class LRB {}
+
+    const di = new DI();
+    di.bind(LRA, [LRB]);
+    di.bind(LRB, [LRA], {lateResolve: true});
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.true(text.includes('lateResolve'));
+});
+
+test('formatDependencyGraph: marks custom factory as unknown deps', (t) => {
+    class CustomSvc {}
+
+    const di = new DI();
+    di.bind(CustomSvc, () => new CustomSvc());
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.true(text.includes('(custom initializer - unknown deps)'));
+});
+
+test('formatDependencyGraph: static method accepts pre-computed graph', (t) => {
+    class StaticFmtSvc {}
+
+    const di = new DI();
+    di.bind(StaticFmtSvc, []);
+
+    const graph = di.getDependencyGraph();
+    const text = DI.formatDependencyGraph(graph);
+
+    t.true(text.includes('StaticFmtSvc'));
+    t.true(text.includes('[singleton]'));
+});
+
+test('formatDependencyGraph: literal and factory deps are rendered in text', (t) => {
+    class MixedDepSvc {}
+
+    function buildValue() {
+        return 'x';
+    }
+
+    const di = new DI();
+    di.bind(MixedDepSvc, [DI.literal(42), DI.factory(buildValue)]);
+
+    const text = di.formatDependencyGraph({header: false});
+
+    t.true(text.includes('Literal<42>'));
+    t.true(text.includes('Factory<buildValue>'));
 });

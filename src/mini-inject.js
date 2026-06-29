@@ -146,11 +146,220 @@ class DIFactory {
         this.#fn = fn;
     }
 
+    get name() {
+        return this.#fn?.name || null;
+    }
+
     /** @param {DI} di */
     get(di) {
         return this.#fn(di);
     }
 }
+
+// ─── Dependency-graph helpers ────────────────────────────────────────────────
+
+/**
+ * Converts a raw binding key (string or Symbol) to a human-readable display string.
+ * Token symbols are rendered as `Token<description>`.
+ * @param {string|Symbol} key
+ * @returns {string}
+ */
+function formatKey(key) {
+    if (typeof key === 'string') return key;
+    if (typeof key === 'symbol') {
+        const desc = key.description ?? '';
+        const match = desc.match(/^__DIToken__\[\[(.+)\]\]$/);
+        if (match) return `Token<${match[1]}>`;
+        return desc || String(key);
+    }
+    return String(key);
+}
+
+/**
+ * Converts a raw dependency array (as stored in a binding) into DepDescriptor objects.
+ * @param {Array} rawDeps
+ * @returns {Array<{type:string, key?:string, value?:unknown, name?:string|null}>}
+ */
+function describeRawDeps(rawDeps) {
+    return rawDeps.map((dep) => {
+        if (dep instanceof DILiteral) return {type: 'literal', value: dep.value};
+        if (dep instanceof DIFactory) return {type: 'factory', name: dep.name};
+        return {type: 'injectable', key: formatKey(resolveKey(dep))};
+    });
+}
+
+/**
+ * DFS-based cycle detection over a directed graph described by nodes+edges.
+ * Returns an array of cycles, each cycle being an array of keys where the first
+ * key is repeated at the end: e.g. ["A","B","A"].
+ * @param {{key:string}[]} nodes
+ * @param {{from:string, to:string}[]} edges
+ * @returns {string[][]}
+ */
+function detectCycles(nodes, edges) {
+    const adj = new Map();
+    for (const node of nodes) adj.set(node.key, []);
+    for (const edge of edges) {
+        const neighbors = adj.get(edge.from);
+        if (neighbors) neighbors.push(edge.to);
+    }
+
+    // Tarjan's SCC — correctly identifies all strongly-connected components
+    // regardless of traversal order, avoiding the missed-cycle bug of simple DFS.
+    const nodeIndex = new Map();
+    const lowlink = new Map();
+    const onStack = new Set();
+    const stack = [];
+    let counter = 0;
+    const sccOf = new Map(); // key → scc array (only for non-trivial SCCs)
+    const nonTrivialSccs = [];
+
+    const strongconnect = (v) => {
+        nodeIndex.set(v, counter);
+        lowlink.set(v, counter);
+        counter++;
+        stack.push(v);
+        onStack.add(v);
+        for (const w of adj.get(v) || []) {
+            if (!nodeIndex.has(w)) {
+                strongconnect(w);
+                lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
+            } else if (onStack.has(w)) {
+                lowlink.set(v, Math.min(lowlink.get(v), nodeIndex.get(w)));
+            }
+        }
+        if (lowlink.get(v) === nodeIndex.get(v)) {
+            const scc = [];
+            let w;
+            do {
+                w = stack.pop();
+                onStack.delete(w);
+                scc.push(w);
+            } while (w !== v);
+            const hasSelfLoop = (adj.get(v) || []).includes(v);
+            if (scc.length > 1 || hasSelfLoop) {
+                scc.reverse(); // restore discovery order (stack pops in reverse)
+                nonTrivialSccs.push(scc);
+                for (const key of scc) sccOf.set(key, scc);
+            }
+        }
+    };
+
+    for (const node of nodes) {
+        if (!nodeIndex.has(node.key)) strongconnect(node.key);
+    }
+
+    // For each non-trivial SCC, extract one representative cycle path (start key repeated at end)
+    const cycles = [];
+    for (const scc of nonTrivialSccs) {
+        const sccSet = new Set(scc);
+        const sccAdj = new Map();
+        for (const v of scc) {
+            sccAdj.set(v, (adj.get(v) || []).filter((w) => sccSet.has(w)));
+        }
+        const start = scc[0];
+        const path = [];
+        const visited = new Set();
+        const findCycle = (v) => {
+            if (v === start && path.length > 0) {
+                cycles.push([...path, start]);
+                return true;
+            }
+            if (visited.has(v)) return false;
+            visited.add(v);
+            path.push(v);
+            for (const w of sccAdj.get(v) || []) {
+                if (findCycle(w)) return true;
+            }
+            path.pop();
+            return false;
+        };
+        findCycle(start);
+    }
+
+    return {cycles, sccOf};
+}
+
+/**
+ * Formats a single DepDescriptor as a concise display string for text output.
+ * @param {{type:string, key?:string, value?:unknown, name?:string|null}} dep
+ * @returns {string}
+ */
+function formatDepText(dep) {
+    if (dep.type === 'injectable') return dep.key;
+    if (dep.type === 'literal') {
+        let val;
+        try {
+            val = JSON.stringify(dep.value);
+            if (val.length > 20) val = val.slice(0, 17) + '...';
+        } catch {
+            val = String(dep.value);
+        }
+        return `Literal<${val}>`;
+    }
+    if (dep.type === 'factory') {
+        return dep.name ? `Factory<${dep.name}>` : 'Factory<anonymous>';
+    }
+    return '?';
+}
+
+/**
+ * Renders a DependencyGraph as a human-readable text report.
+ * @param {{nodes:any[], edges:any[], cycles:string[][]}} graph
+ * @param {{header?:boolean}} [opts]
+ * @returns {string}
+ */
+function formatGraphText(graph, opts) {
+    const {header = true} = opts || {};
+    const lines = [];
+
+    if (header) {
+        const title = `mini-inject dependency graph — ${graph.nodes.length} binding(s), ${graph.cycles.length} cycle(s)`;
+        lines.push(title);
+        lines.push('═'.repeat(title.length));
+        lines.push('');
+    }
+
+    const maxKeyLen = Math.max(4, ...graph.nodes.map((n) => n.key.length));
+
+    // Map each node key to the first cycle string it participates in
+    const nodeToCycle = new Map();
+    for (const cycle of graph.cycles) {
+        const cycleStr = cycle.join(' → ');
+        for (const key of cycle.slice(0, -1)) {
+            if (!nodeToCycle.has(key)) nodeToCycle.set(key, cycleStr);
+        }
+    }
+
+    for (const node of graph.nodes) {
+        const keyCol = node.key.padEnd(maxKeyLen);
+        const singletonCol = node.isSingleton ? '[singleton]' : '[transient]';
+        const lateCol = node.lateResolve ? '  lateResolve' : '             ';
+        let depsCol;
+        if (node.deps === null) {
+            depsCol = '(custom initializer - unknown deps)';
+        } else if (node.deps.length === 0) {
+            depsCol = '';
+        } else {
+            depsCol = node.deps.map(formatDepText).join(', ');
+        }
+        const cycleStr = nodeToCycle.get(node.key);
+        const cycleCol = cycleStr ? `  ⚠ CYCLE: ${cycleStr}` : '';
+        lines.push(`${keyCol}  ${singletonCol}${lateCol}  ${depsCol}${cycleCol}`);
+    }
+
+    if (header && graph.cycles.length > 0) {
+        lines.push('');
+        lines.push('Cycles detected:');
+        graph.cycles.forEach((cycle, i) => {
+            lines.push(`  [${i + 1}] ${cycle.join(' → ')}`);
+        });
+    }
+
+    return lines.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class DI {
     /** @type {Map<string|Symbol, any>} */
@@ -159,6 +368,8 @@ class DI {
     #bindings = new Map();
     /** @type {DI[]} */
     #subModules = [];
+    /** @type {DI | null} Parent DI instance when this is a fork */
+    #parent = null;
     /** @type {Set<string|Symbol>} Keys currently mid-resolution in this call-stack */
     #resolving = new Set();
     /** @type {Map<string|Symbol, {instance: any}>} Resolver refs for auto-detected cycle proxies */
@@ -230,6 +441,7 @@ class DI {
                 const subBinding = subModule.getBinding(injectable);
                 if (subBinding) return subBinding;
             }
+            if (this.#parent) return this.#parent.getBinding(injectable);
             return undefined;
         }
         return {
@@ -251,6 +463,11 @@ class DI {
             // First we try the subModules
             for (const subModule of this.#subModules) {
                 if (subModule.has(injectable)) return subModule.get(injectable);
+            }
+
+            // Then delegate to the parent (if this is a fork)
+            if (this.#parent && this.#parent.has(injectable)) {
+                return this.#parent.get(injectable);
             }
 
             /* *
@@ -336,6 +553,90 @@ class DI {
         };
     }
 
+    /**
+     * Build a dependency graph for this DI module (and any attached sub-modules).
+     * Bindings declared with an array of dependencies are fully described; bindings
+     * declared with a custom factory function are marked with `deps: null`.
+     * @returns {{nodes: any[], edges: any[], cycles: string[][]}}
+     */
+    getDependencyGraph() {
+        return DI.getDependencyGraph(this);
+    }
+
+    /**
+     * Build a dependency graph for the given DI module.
+     * @param {DI} di
+     * @returns {{nodes: any[], edges: any[], cycles: string[][]}}
+     */
+    static getDependencyGraph(di) {
+        const nodes = [];
+        const nodeKeySet = new Set();
+
+        function collect(diInstance, isSubModule) {
+            for (const [key, binding] of diInstance.#bindings) {
+                const displayKey = formatKey(key);
+                if (nodeKeySet.has(displayKey)) continue; // parent takes precedence
+                nodeKeySet.add(displayKey);
+                nodes.push({
+                    key: displayKey,
+                    isSingleton: binding.isSingleton,
+                    lateResolve: binding.lateResolve,
+                    isSubModule,
+                    deps: binding.rawDeps !== null ? describeRawDeps(binding.rawDeps) : null,
+                });
+            }
+            for (const sub of diInstance.#subModules) {
+                collect(sub, true);
+            }
+        }
+
+        collect(di, false);
+
+        // Build edges — only between known nodes, deduped
+        const edges = [];
+        const edgeSeen = new Set();
+        for (const node of nodes) {
+            if (!node.deps) continue;
+            for (const dep of node.deps) {
+                if (dep.type !== 'injectable') continue;
+                if (!nodeKeySet.has(dep.key)) continue;
+                const edgeKey = JSON.stringify([node.key, dep.key]);
+                if (edgeSeen.has(edgeKey)) continue;
+                edgeSeen.add(edgeKey);
+                edges.push({from: node.key, to: dep.key, isCircular: false});
+            }
+        }
+
+        // Detect cycles then mark affected edges
+        // An edge is circular iff both endpoints belong to the same non-trivial SCC.
+        const {cycles, sccOf} = detectCycles(nodes, edges);
+        for (const edge of edges) {
+            const fromScc = sccOf.get(edge.from);
+            edge.isCircular = fromScc !== undefined && fromScc === sccOf.get(edge.to);
+        }
+
+        return {nodes, edges, cycles};
+    }
+
+    /**
+     * Render the dependency graph of this module as a human-readable text report.
+     * @param {{header?: boolean}} [opts]
+     * @returns {string}
+     */
+    formatDependencyGraph(opts) {
+        return DI.formatDependencyGraph(this.getDependencyGraph(), opts);
+    }
+
+    /**
+     * Render a pre-computed dependency graph as a human-readable text report.
+     * @param {{nodes: any[], edges: any[], cycles: string[][]}} graph
+     * @param {{header?: boolean}} [opts]
+     * @returns {string}
+     */
+    static formatDependencyGraph(graph, opts) {
+        return formatGraphText(graph, opts);
+    }
+
     bind(injectable, dep, opts) {
         const token = injectable;
         injectable = token instanceof Token ? token.value : injectable;
@@ -365,7 +666,7 @@ class DI {
             return dep;
         })();
 
-        const {isSingleton = true, lateResolve = false} = opts || {};
+        const {isSingleton = true, lateResolve = false, eager = false} = opts || {};
         const key = resolveKey(token);
         if (this.#container.has(key)) this.#container.delete(key);
         this.#bindings.set(key, {
@@ -373,7 +674,9 @@ class DI {
             isSingleton,
             lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
             injectable,
+            rawDeps: dependencies,
         });
+        if (eager && isSingleton) this.get(token);
         return this;
     }
 
@@ -390,10 +693,41 @@ class DI {
         return this;
     }
 
+    fork() {
+        const child = new DI();
+        child.#parent = this;
+        return child;
+    }
+
+    #disposeInstance(instance) {
+        if (instance && typeof instance.dispose === 'function') {
+            try {
+                instance.dispose();
+            } catch {
+                // ignore errors from dispose
+            }
+        }
+    }
+
+    unbind(injectable) {
+        const key = resolveKey(injectable);
+        if (this.#container.has(key)) {
+            this.#disposeInstance(this.#container.get(key));
+            this.#container.delete(key);
+        }
+        this.#bindings.delete(key);
+        return this;
+    }
+
     clear() {
         // Clear all sub-modules first
         for (const subModule of this.#subModules) {
             subModule.clear();
+        }
+
+        // Dispose all cached singleton instances
+        for (const instance of this.#container.values()) {
+            this.#disposeInstance(instance);
         }
 
         // Clear current instance containers
