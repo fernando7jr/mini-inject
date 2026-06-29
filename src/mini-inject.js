@@ -471,19 +471,30 @@ class DI {
     getBinding(injectable) {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
-        if (!binding?.func) {
-            for (const subModule of this.#subModules) {
-                const subBinding = subModule.getBinding(injectable);
-                if (subBinding) return subBinding;
+        if (binding) {
+            if (binding.isContainerBinding) {
+                return binding.items.map(item => ({
+                    isSingleton: Boolean(item.isSingleton),
+                    lateResolve: Boolean(item.lateResolve),
+                    eager: Boolean(item.eager),
+                    resolveFunction: item.func,
+                }));
             }
-            if (this.#parent) return this.#parent.getBinding(injectable);
-            return undefined;
+            if (binding.func) {
+                return {
+                    isSingleton: Boolean(binding.isSingleton),
+                    lateResolve: Boolean(binding.lateResolve),
+                    eager: Boolean(binding.eager),
+                    resolveFunction: binding.func,
+                };
+            }
         }
-        return {
-            isSingleton: Boolean(binding.isSingleton),
-            lateResolve: Boolean(binding.lateResolve),
-            resolveFunction: binding.func,
-        };
+        for (const subModule of this.#subModules) {
+            const subBinding = subModule.getBinding(injectable);
+            if (subBinding) return subBinding;
+        }
+        if (this.#parent) return this.#parent.getBinding(injectable);
+        return undefined;
     }
 
     has(injectable) {
