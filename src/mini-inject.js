@@ -11,6 +11,7 @@ function resolveKey(injectable) {
     else if (typeof injectable === "string" || injectable instanceof Symbol)
         return injectable;
     else if (injectable instanceof Token) return injectable.toSymbol();
+    else if (injectable instanceof Container) return injectable.toSymbol();
     else if (injectable.name) return injectable.name;
     else if (injectable.toString && injectable.toString.apply)
         return injectable.toString();
@@ -33,6 +34,30 @@ class Token {
         this.#description = resolveKey(description ?? injectable);
         // Use regular Symbol instead of Symbol.for to avoid global registry
         this.#symbol = Symbol(`__DIToken__[[${this.#description}]]`);
+    }
+
+    get value() {
+        return this.#injectable;
+    }
+
+    toSymbol() {
+        return this.#symbol;
+    }
+}
+
+class Container {
+    #injectable;
+    #description;
+    #symbol; // Cache the symbol to avoid recreating it
+
+    static for(injectable, description) {
+        return new Container(injectable, description);
+    }
+
+    constructor(injectable, description) {
+        this.#injectable = injectable;
+        this.#description = resolveKey(description ?? injectable);
+        this.#symbol = Symbol(`__DIContainer__[[${this.#description}]]`);
     }
 
     get value() {
@@ -168,8 +193,10 @@ function formatKey(key) {
     if (typeof key === 'string') return key;
     if (typeof key === 'symbol') {
         const desc = key.description ?? '';
-        const match = desc.match(/^__DIToken__\[\[(.+)\]\]$/);
+        let match = desc.match(/^__DIToken__\[\[(.+)\]\]$/);
         if (match) return `Token<${match[1]}>`;
+        match = desc.match(/^__DIContainer__\[\[(.+)\]\]$/);
+        if (match) return `Container<${match[1]}>`;
         return desc || String(key);
     }
     return String(key);
@@ -421,6 +448,10 @@ class DI {
         return Token.for(injectable, description);
     }
 
+    static container(injectable, description) {
+        return Container.for(injectable, description);
+    }
+
     literal(value) {
         return DI.literal(value);
     }
@@ -431,6 +462,10 @@ class DI {
 
     token(injectable, description) {
         return DI.token(injectable, description);
+    }
+
+    container(injectable, description) {
+        return DI.container(injectable, description);
     }
 
     getBinding(injectable) {
@@ -459,7 +494,7 @@ class DI {
         const key = resolveKey(injectable);
         const binding = this.#bindings.get(key);
 
-        if (!binding || !binding.func) {
+        if (!binding || (!binding.func && !binding.isContainerBinding)) {
             // First we try the subModules
             for (const subModule of this.#subModules) {
                 if (subModule.has(injectable)) return subModule.get(injectable);
@@ -478,9 +513,32 @@ class DI {
             const isFallbackProvided = arguments.length > 1;
             if (isFallbackProvided) return fallbackToValue;
             throw new Error(`No binding for injectable "${key}"`);
-        } else if (!binding.isSingleton) {
+        }
+        
+        if (binding.isContainerBinding) {
+            return binding.items.map((item, index) => {
+                const itemKey = Symbol.for(`${String(key)}_${index}`);
+                return this.#resolveBinding(itemKey, item, {
+                    has: () => item.instance !== undefined,
+                    get: () => item.instance,
+                    set: (v) => { item.instance = v; },
+                    delete: () => { item.instance = undefined; }
+                });
+            });
+        }
+
+        return this.#resolveBinding(key, binding, {
+            has: () => this.#container.has(key),
+            get: () => this.#container.get(key),
+            set: (v) => this.#container.set(key, v),
+            delete: () => this.#container.delete(key)
+        });
+    }
+
+    #resolveBinding(key, binding, cacheProvider) {
+        if (!binding.isSingleton) {
             return binding.func(this);
-        } else if (!this.#container.has(key)) {
+        } else if (!cacheProvider.has()) {
             if (DI.#autoResolveCircular || this.#instanceAutoResolveCircular) {
                 if (this.#resolving.has(key)) {
                     // Cycle detected at runtime: create a Proxy now so the caller
@@ -491,7 +549,7 @@ class DI {
                         () => resolverRef.instance,
                         binding.injectable,
                     ).build();
-                    this.#container.set(key, proxy);
+                    cacheProvider.set(proxy);
                     this.#pendingProxies.set(key, resolverRef);
                 } else {
                     this.#resolving.add(key);
@@ -505,7 +563,7 @@ class DI {
                             this.#pendingProxies.delete(key);
                         } else {
                             // No cycle: store the real instance directly.
-                            this.#container.set(key, instance);
+                            cacheProvider.set(instance);
                         }
                     } finally {
                         this.#resolving.delete(key);
@@ -513,12 +571,12 @@ class DI {
                         // remove the dangling proxy so the key is re-resolvable.
                         if (this.#pendingProxies.has(key)) {
                             this.#pendingProxies.delete(key);
-                            this.#container.delete(key);
+                            cacheProvider.delete();
                         }
                     }
                 }
             } else if (binding.lateResolve) {
-                this.#container.set(key, this.#proxy(binding));
+                cacheProvider.set(this.#proxy(binding));
             } else {
                 if (this.#resolutionStack.includes(key)) {
                     const chain = [...this.#resolutionStack, key].map((k) => String(k)).join(' → ');
@@ -531,13 +589,13 @@ class DI {
                 this.#resolutionStack.push(key);
                 try {
                     const instance = binding.func(this);
-                    this.#container.set(key, instance);
+                    cacheProvider.set(instance);
                 } finally {
                     this.#resolutionStack.pop();
                 }
             }
         }
-        return this.#container.get(key);
+        return cacheProvider.get();
     }
 
     getAll(...injectables) {
@@ -577,13 +635,28 @@ class DI {
                 const displayKey = formatKey(key);
                 if (nodeKeySet.has(displayKey)) continue; // parent takes precedence
                 nodeKeySet.add(displayKey);
-                nodes.push({
-                    key: displayKey,
-                    isSingleton: binding.isSingleton,
-                    lateResolve: binding.lateResolve,
-                    isSubModule,
-                    deps: binding.rawDeps !== null ? describeRawDeps(binding.rawDeps) : null,
-                });
+                
+                if (binding.isContainerBinding) {
+                    const allDeps = [];
+                    binding.items.forEach(item => {
+                        if (item.rawDeps) allDeps.push(...describeRawDeps(item.rawDeps));
+                    });
+                    nodes.push({
+                        key: displayKey,
+                        isSingleton: false,
+                        lateResolve: false,
+                        isSubModule,
+                        deps: allDeps.length > 0 ? allDeps : null,
+                    });
+                } else {
+                    nodes.push({
+                        key: displayKey,
+                        isSingleton: binding.isSingleton,
+                        lateResolve: binding.lateResolve,
+                        isSubModule,
+                        deps: binding.rawDeps !== null ? describeRawDeps(binding.rawDeps) : null,
+                    });
+                }
             }
             for (const sub of diInstance.#subModules) {
                 collect(sub, true);
@@ -639,7 +712,8 @@ class DI {
 
     bind(injectable, dep, opts) {
         const token = injectable;
-        injectable = token instanceof Token ? token.value : injectable;
+        const isContainer = token instanceof Container;
+        injectable = token instanceof Token || isContainer ? token.value : injectable;
 
         const dependencies = !dep ? [] : Array.isArray(dep) ? dep : null;
         const dependenciesArrayIsEmpty = dependencies?.length === 0;
@@ -649,34 +723,83 @@ class DI {
             );
         }
 
-        const func = (() => {
+        const funcAndDeps = (() => {
             if (dependencies) {
                 /** @param {DI} di */
-                return (di) => {
-                    const resolvedDependencies = dependencies.map((d) => {
-                        if (d instanceof DILiteral) return d.value;
-                        else if (d instanceof DIFactory) return d.get(di);
-                        return di.get(d);
-                    });
-                    if (!isClass(injectable))
-                        return injectable.apply(injectable, resolvedDependencies);
-                    return new injectable(...resolvedDependencies);
+                return {
+                    func: (di) => {
+                        const resolvedDependencies = dependencies.map((d) => {
+                            if (d instanceof DILiteral) return d.value;
+                            else if (d instanceof DIFactory) return d.get(di);
+                            return di.get(d);
+                        });
+                        if (!isClass(injectable))
+                            return injectable.apply(injectable, resolvedDependencies);
+                        return new injectable(...resolvedDependencies);
+                    },
+                    deps: dependencies
                 };
             }
-            return dep;
+            if (isContainer) {
+                if (typeof dep !== 'function' || isClass(dep) || dep instanceof Token || dep instanceof Container) {
+                    return {
+                        func: (di) => di.get(dep),
+                        deps: [dep]
+                    };
+                }
+            }
+            return { func: dep, deps: null };
         })();
+        
+        const func = funcAndDeps.func;
+        const rawDeps = funcAndDeps.deps;
 
         const {isSingleton = true, lateResolve = false, eager = false} = opts || {};
         const key = resolveKey(token);
-        if (this.#container.has(key)) this.#container.delete(key);
-        this.#bindings.set(key, {
-            func,
-            isSingleton,
-            lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
-            injectable,
-            rawDeps: dependencies,
-        });
-        if (eager && isSingleton) this.get(token);
+        
+        if (isContainer) {
+            const existing = this.#bindings.get(key);
+            const newItem = {
+                func,
+                isSingleton,
+                lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
+                injectable,
+                rawDeps,
+                instance: undefined
+            };
+            
+            if (existing && existing.isContainerBinding) {
+                existing.items.push(newItem);
+            } else {
+                if (this.#container.has(key)) this.#container.delete(key);
+                this.#bindings.set(key, {
+                    isContainerBinding: true,
+                    items: [newItem]
+                });
+            }
+            if (eager && isSingleton) {
+                const binding = this.#bindings.get(key);
+                const item = binding.items[binding.items.length - 1];
+                const itemKey = Symbol.for(`${String(key)}_${binding.items.length - 1}`);
+                this.#resolveBinding(itemKey, item, {
+                    has: () => item.instance !== undefined,
+                    get: () => item.instance,
+                    set: (v) => { item.instance = v; },
+                    delete: () => { item.instance = undefined; }
+                });
+            }
+        } else {
+            if (this.#container.has(key)) this.#container.delete(key);
+            this.#bindings.set(key, {
+                func,
+                isSingleton,
+                lateResolve: dependenciesArrayIsEmpty ? false : lateResolve,
+                injectable,
+                rawDeps,
+            });
+            if (eager && isSingleton) this.get(token);
+        }
+        
         return this;
     }
 
@@ -741,4 +864,4 @@ class DI {
 }
 
 // Export for both CommonJS and ES modules
-export {DI, DILiteral, DIFactory, Token};
+export {DI, DILiteral, DIFactory, Token, Container};

@@ -2,6 +2,17 @@ export type ClassType = (Function | Object) & { name: string };
 export type ClassConstructor<T> = ClassType & { new (...args: any): T };
 export type Injectable<T> = ClassConstructor<T> | string | Symbol;
 export type InjectableOrToken<T> = Injectable<T> | Token<T>;
+export type AnyInjectable<T> = Injectable<T> | Token<T> | Container<T>;
+
+/** Resolves the underlying type of an injectable parameter */
+export type ResolveInjectable<I, Fallback = any> = 
+  I extends Container<infer T> ? T[] :
+  I extends Token<infer T> ? T :
+  I extends ClassConstructor<infer T> ? T :
+  Fallback;
+
+export type InjectableParam<T> = T extends AnyInjectable<any> ? T : AnyInjectable<T>;
+
 export type Dependency =
   | ClassConstructor<any>
   | string
@@ -170,7 +181,7 @@ export class Token<T> {
    * console.log(v.value); // prints "6"
    * ````
    */
-  constructor(injectable: T, description?: string);
+  constructor(injectable: Injectable<T>, description?: string);
 
   /**
    * The injectable which the token is refering
@@ -179,6 +190,46 @@ export class Token<T> {
 
   /**
    * Get a symbol representation for the token
+   */
+  toSymbol(): Symbol;
+}
+
+/**
+ * A Container reference used to accumulate multiple bindings under a single key.
+ * Unlike standard DI bindings where repeated binds to the same key overwrite the previous ones,
+ * bindings to a Container append new resolvers into the Container's internal list.
+ * 
+ * When `di.get()` resolves a Container, it evaluates all its items and returns an array of instances.
+ * 
+ * Rather than instantiating this class directly, it is recommended to use `di.container('name')` or `DI.container('name')`.
+ * 
+ * @example
+ * ```javascript
+ * const plugins = di.container('plugins');
+ * class PluginA {}
+ * class PluginB {}
+ * 
+ * di.bind(PluginA, []);
+ * di.bind(PluginB, []);
+ * di.bind(plugins, PluginA, { isSingleton: true });
+ * di.bind(plugins, PluginB, { isSingleton: false });
+ * 
+ * const list = di.get(plugins); // [PluginA, PluginB]
+ * ```
+ */
+export class Container<T> {
+  static for<T>(injectable: InjectableOrToken<T>): Container<T>;
+  static for<T>(injectable: Injectable<T>, description?: string): Container<T>;
+
+  constructor(injectable: InjectableOrToken<T>, description?: string);
+
+  /**
+   * The injectable which the container is refering
+   */
+  readonly value: T;
+
+  /**
+   * Get a symbol representation for the container
    */
   toSymbol(): Symbol;
 }
@@ -430,6 +481,12 @@ export class DI {
    */
   static token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
+  static container<T>(injectable: InjectableOrToken<T>): Container<T>;
+  static container<T>(
+    injectable: Injectable<T>,
+    description?: string,
+  ): Container<T>;
+
   /**
    * Globally enable or disable automatic circular-dependency resolution for **all** `DI` instances.
    *
@@ -570,6 +627,9 @@ export class DI {
    */
   token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
+  container<T>(injectable: InjectableOrToken<T>): Container<T>;
+  container<T>(injectable: Injectable<T>, description?: string): Container<T>;
+
   /**
    * Enable or disable automatic circular-dependency resolution for **this** `DI` instance.
    *
@@ -657,11 +717,22 @@ export class DI {
     | undefined;
 
   /**
+   * Get the bindings for the container if available otherwise return undefined
+   * Each binding consists of its parameters and a resolving function for returning the instance
+   * Only known parameters are returned
+   * @param container the container used for the bindings
+   * @returns A copy array of all the bindings for the container. If not bindings then an empty array is returned
+   */
+  getBinding<T>(
+    container: Container<T>,
+  ): { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T }[];
+
+  /**
    * Check if the module has a binding for an injectable
    * @param injectable an injectable class or a string key-value used for the binding
    * @returns true if the binding exists otherwise false
    */
-  has<T>(injectable: InjectableOrToken<T>): boolean;
+  has<T>(injectable: AnyInjectable<T>): boolean;
 
   /**
    * Get an instance for the previously class binding.
@@ -764,6 +835,13 @@ export class DI {
    *
    */
   get<T, F>(injectable: InjectableOrToken<T>, fallbackToValue: F): T | F;
+  /**
+   * Get all instances for the previously container bindings
+   * @param container the container used for the bindings
+   * @param fallbackToEmptyList if true, returns an empty array if no bindings are found; otherwise, throws an error
+   * @returns an array of instances
+   */
+  get<T>(container: Container<T>, fallbackToEmptyList?: boolean): T[];
 
   /**
    * Get all instances for the previously class bindings
@@ -804,154 +882,154 @@ export class DI {
    * ```
    *
    */
-  getAll<T1>(injectable1: InjectableOrToken<T1>): [T1];
+  getAll<T1>(injectable1: InjectableParam<T1>): [ResolveInjectable<T1, T1>];
   getAll<T1, T2>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-  ): [T1, T2];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>];
   getAll<T1, T2, T3>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-  ): [T1, T2, T3];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>];
   getAll<T1, T2, T3, T4>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-  ): [T1, T2, T3, T4];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>];
   getAll<T1, T2, T3, T4, T5>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-  ): [T1, T2, T3, T4, T5];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>];
   getAll<T1, T2, T3, T4, T5, T6>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-  ): [T1, T2, T3, T4, T5, T6];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>];
   getAll<T1, T2, T3, T4, T5, T6, T7>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-  ): [T1, T2, T3, T4, T5, T6, T7];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>, ResolveInjectable<T9, T9>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-    injectable10: InjectableOrToken<T10>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>, ResolveInjectable<T9, T9>, ResolveInjectable<T10, T10>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-    injectable10: InjectableOrToken<T10>,
-    injectable11: InjectableOrToken<T11>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>, ResolveInjectable<T9, T9>, ResolveInjectable<T10, T10>, ResolveInjectable<T11, T11>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-    injectable10: InjectableOrToken<T10>,
-    injectable11: InjectableOrToken<T11>,
-    injectable12: InjectableOrToken<T12>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>, ResolveInjectable<T9, T9>, ResolveInjectable<T10, T10>, ResolveInjectable<T11, T11>, ResolveInjectable<T12, T12>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-    injectable10: InjectableOrToken<T10>,
-    injectable11: InjectableOrToken<T11>,
-    injectable12: InjectableOrToken<T12>,
-    injectable13: InjectableOrToken<T13>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+    injectable13: InjectableParam<T13>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>, ResolveInjectable<T9, T9>, ResolveInjectable<T10, T10>, ResolveInjectable<T11, T11>, ResolveInjectable<T12, T12>, ResolveInjectable<T13, T13>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-    injectable10: InjectableOrToken<T10>,
-    injectable11: InjectableOrToken<T11>,
-    injectable12: InjectableOrToken<T12>,
-    injectable13: InjectableOrToken<T13>,
-    injectable14: InjectableOrToken<T14>,
-  ): [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14];
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+    injectable13: InjectableParam<T13>,
+    injectable14: InjectableParam<T14>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>, ResolveInjectable<T3, T3>, ResolveInjectable<T4, T4>, ResolveInjectable<T5, T5>, ResolveInjectable<T6, T6>, ResolveInjectable<T7, T7>, ResolveInjectable<T8, T8>, ResolveInjectable<T9, T9>, ResolveInjectable<T10, T10>, ResolveInjectable<T11, T11>, ResolveInjectable<T12, T12>, ResolveInjectable<T13, T13>, ResolveInjectable<T14, T14>];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(
-    injectable1: InjectableOrToken<T1>,
-    injectable2: InjectableOrToken<T2>,
-    injectable3: InjectableOrToken<T3>,
-    injectable4: InjectableOrToken<T4>,
-    injectable5: InjectableOrToken<T5>,
-    injectable6: InjectableOrToken<T6>,
-    injectable7: InjectableOrToken<T7>,
-    injectable8: InjectableOrToken<T8>,
-    injectable9: InjectableOrToken<T9>,
-    injectable10: InjectableOrToken<T10>,
-    injectable11: InjectableOrToken<T11>,
-    injectable12: InjectableOrToken<T12>,
-    injectable13: InjectableOrToken<T13>,
-    injectable14: InjectableOrToken<T14>,
-    injectable15: InjectableOrToken<T15>,
-    ...injectables: InjectableOrToken<any>[]
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+    injectable13: InjectableParam<T13>,
+    injectable14: InjectableParam<T14>,
+    injectable15: InjectableParam<T15>,
+    ...injectables: AnyInjectable<any>[]
   ): [
     T1,
     T2,
@@ -977,6 +1055,12 @@ export class DI {
    * @returns an object that resolves to an instance of T
    */
   getResolver<T>(injectable: InjectableOrToken<T>): DIResolver<T>;
+  /**
+   * Get an object with a method to get all instances of the container bindings
+   * @param container the container used for the bindings
+   * @returns an object that resolves to an array of instances of T
+   */
+  getResolver<T>(container: Container<T>): DIResolver<T[]>;
 
   /**
    * Bind a class or another constructable object so it can be fetched later.
@@ -998,6 +1082,7 @@ export class DI {
    * @param dependencies a tuple of dependencies, one per constructor parameter, in the same order
    * @param opts.isSingleton optional; `true` by default
    * @param opts.lateResolve optional; defers instantiation until first property access (Proxy). Ignored in auto mode.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
    * @returns this
    *
    * @example
@@ -1018,6 +1103,32 @@ export class DI {
     opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
   ): this;
   /**
+   * Bind an injectable to a Container. The container will append this binding to its internal array.
+   * @param container the target Container reference
+   * @param dependency the dependency to resolve when retrieving this container item
+   * @param opts.isSingleton optional; `true` by default
+   * @param opts.lateResolve optional; defers instantiation until first property access (Proxy). Ignored in auto mode.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
+   * @example
+   * ```javascript
+   * const plugins = di.container('plugins');
+   * class PluginA {}
+   * class PluginB {}
+   * di.bind(PluginA, []);
+   * di.bind(PluginB, []);
+   *
+   * di.bind(plugins, PluginA);
+   * di.bind(plugins, PluginB);
+   *
+   * const list = di.get(plugins); // [PluginA, PluginB]
+   * ```
+   */
+  bind<T>(
+    container: Container<T>,
+    dependency: DependencyFor<T> | BindingFunc<T>,
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean },
+  ): this;
+  /**
    * Bind a class or another constructable object so it can be fetched later
    * The binding method is generated automatically from the injectable and array of dependencies
    * Passing a non constructable class or function along an array of dependencies will throw an error. Tokens are acceptable though
@@ -1030,6 +1141,7 @@ export class DI {
    * This is the manual opt-in for breaking circular dependencies. It is `false` by default.
    * **Note:** this flag is silently ignored when `autoResolveCircularDependencies` is enabled (globally or on this instance) —
    * in that mode cycles are detected automatically and only the binding actually caught in the cycle receives a Proxy.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
    * @returns this
    *
    * @example
@@ -1065,6 +1177,7 @@ export class DI {
    * This is the manual opt-in for breaking circular dependencies. It is `false` by default.
    * **Note:** this flag is silently ignored when `autoResolveCircularDependencies` is enabled (globally or on this instance) —
    * in that mode cycles are detected automatically and only the binding actually caught in the cycle receives a Proxy.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
    * @returns this
    *
    * @example
@@ -1146,7 +1259,7 @@ export class DI {
    * console.log(di.has(DbConnection)); // false  — binding removed
    * ```
    */
-  unbind<T>(injectable: InjectableOrToken<T>): this;
+  unbind<T>(injectable: AnyInjectable<T>): this;
 
   /**
    * Create a fork (child scope) of this DI instance.

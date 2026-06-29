@@ -1590,3 +1590,70 @@ test('formatDependencyGraph: literal and factory deps are rendered in text', (t)
     t.true(text.includes('Literal<42>'));
     t.true(text.includes('Factory<buildValue>'));
 });
+
+test('Container: allows binding multiple injectables and returns an array', (t) => {
+    class PluginA {value = 'A';}
+    class PluginB {value = 'B';}
+
+    const di = new DI();
+    const plugins = di.container('plugins');
+
+    di.bind(PluginA, []);
+    di.bind(PluginB, []);
+
+    di.bind(plugins, PluginA);
+    di.bind(plugins, PluginB);
+
+    const list = di.get(plugins);
+    t.is(list.length, 2);
+    t.true(list[0] instanceof PluginA);
+    t.true(list[1] instanceof PluginB);
+    t.is(list[0].value, 'A');
+});
+
+test('Container: handles singleton and transient bindings correctly', (t) => {
+    class PluginA {constructor() {this.id = Math.random();} }
+    class PluginB {constructor() {this.id = Math.random();} }
+
+    const di = new DI();
+    const plugins = di.container('plugins');
+
+    di.bind(plugins, () => new PluginA(), {isSingleton: true});
+    di.bind(plugins, () => new PluginB(), {isSingleton: false});
+
+    const list1 = di.get(plugins);
+    const list2 = di.get(plugins);
+
+    t.is(list1[0], list2[0]); // Singleton
+    t.not(list1[1], list2[1]); // Transient
+});
+
+test('Container: works with factories and dependencies', (t) => {
+    class Dep {value = 'Dep';}
+    const di = new DI();
+    const plugins = di.container('plugins');
+
+    di.bind(Dep, []);
+    di.bind(plugins, () => 'A');
+    di.bind(plugins, (di) => di.get(Dep).value);
+
+    const list = di.get(plugins);
+    t.deepEqual(list, ['A', 'Dep']);
+});
+
+test('Container: eager loading works for container items', (t) => {
+    let calls = 0;
+    class EagerPlugin {constructor() {calls++;} }
+
+    const di = new DI();
+    const plugins = di.container('plugins');
+
+    di.bind(EagerPlugin, []);
+    di.bind(plugins, EagerPlugin, {eager: true});
+
+    t.is(calls, 1); // Should be called immediately
+
+    const list = di.get(plugins);
+    t.is(calls, 1); // Should use cached instance
+    t.true(list[0] instanceof EagerPlugin);
+});
