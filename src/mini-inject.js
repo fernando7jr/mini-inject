@@ -20,6 +20,10 @@ function resolveKey(injectable) {
     return new String(injectable);
 }
 
+const IS_DI_PROXY = Symbol('IS_DI_PROXY');
+const HAS_DI_PROXY_INSTANCE = Symbol('HAS_DI_PROXY_INSTANCE');
+const GET_DI_PROXY_INSTANCE = Symbol('GET_DI_PROXY_INSTANCE');
+
 class Token {
     #injectable;
     #description;
@@ -91,12 +95,18 @@ class DIProxyBuilder {
 
     build() {
         const getInstance = () => this.#getInstance();
+        const hasInstance = () => this.#hasInstance;
+        const getRawInstance = () => this.#__instance;
         const className = this.#targetClass?.name || "Object";
         const shell = this.#targetClass?.prototype
             ? Object.create(this.#targetClass.prototype)
             : {};
         const handler = {
             get(target, prop, receiver) {
+                if (prop === IS_DI_PROXY) return true;
+                if (prop === HAS_DI_PROXY_INSTANCE) return hasInstance();
+                if (prop === GET_DI_PROXY_INSTANCE) return getRawInstance();
+
                 if (prop === Symbol.toStringTag) {
                     return className;
                 }
@@ -834,6 +844,13 @@ class DI {
     }
 
     #disposeInstance(instance) {
+        if (!instance) return;
+
+        if (instance[IS_DI_PROXY]) {
+            if (!instance[HAS_DI_PROXY_INSTANCE]) return;
+            instance = instance[GET_DI_PROXY_INSTANCE];
+        }
+
         if (instance && typeof instance.dispose === 'function') {
             try {
                 instance.dispose();

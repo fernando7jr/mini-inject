@@ -653,6 +653,16 @@ npx mini-inject analyze ./src/container.js --export=appDI
 
 ## Changelog
 
+#### 1.13.2
+
+* Fixed a critical bug in `di.clear()` where uninitialized Proxy instances (from `lateResolve: true`) were being eagerly instantiated just to check for a `dispose` method. Now, uninitialized proxies are correctly bypassed during clear.
+
+#### 1.13.1
+
+* Fixed `di.has()` and `di.getBinding()` not working for Container bindings.
+* Fixed TypeScript overload resolution for `di.get()` when passing a Container. It now correctly infers `T[]` return type.
+* Fixed the `get()` fallback behavior for Containers; it now correctly returns an empty array `[]` when `fallbackToEmptyList` is truthy and the container has no bindings, instead of returning `true`.
+
 #### 1.13.0
 
 * Added `Container` class — allows binding multiple injectables, factories, or tokens to a single container reference. When resolved, the container returns an array containing all resolved items.
