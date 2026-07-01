@@ -535,15 +535,15 @@ class DI {
             if (isFallbackProvided) return fallbackToValue;
             throw new Error(`No binding for injectable "${key}"`);
         }
-        
+
         if (binding.isContainerBinding) {
             return binding.items.map((item, index) => {
                 const itemKey = Symbol.for(`${String(key)}_${index}`);
                 return this.#resolveBinding(itemKey, item, {
                     has: () => item.instance !== undefined,
                     get: () => item.instance,
-                    set: (v) => { item.instance = v; },
-                    delete: () => { item.instance = undefined; }
+                    set: (v) => {item.instance = v;},
+                    delete: () => {item.instance = undefined;}
                 });
             });
         }
@@ -656,7 +656,7 @@ class DI {
                 const displayKey = formatKey(key);
                 if (nodeKeySet.has(displayKey)) continue; // parent takes precedence
                 nodeKeySet.add(displayKey);
-                
+
                 if (binding.isContainerBinding) {
                     const allDeps = [];
                     binding.items.forEach(item => {
@@ -769,15 +769,15 @@ class DI {
                     };
                 }
             }
-            return { func: dep, deps: null };
+            return {func: dep, deps: null};
         })();
-        
+
         const func = funcAndDeps.func;
         const rawDeps = funcAndDeps.deps;
 
         const {isSingleton = true, lateResolve = false, eager = false} = opts || {};
         const key = resolveKey(token);
-        
+
         if (isContainer) {
             const existing = this.#bindings.get(key);
             const newItem = {
@@ -788,7 +788,7 @@ class DI {
                 rawDeps,
                 instance: undefined
             };
-            
+
             if (existing && existing.isContainerBinding) {
                 existing.items.push(newItem);
             } else {
@@ -805,8 +805,8 @@ class DI {
                 this.#resolveBinding(itemKey, item, {
                     has: () => item.instance !== undefined,
                     get: () => item.instance,
-                    set: (v) => { item.instance = v; },
-                    delete: () => { item.instance = undefined; }
+                    set: (v) => {item.instance = v;},
+                    delete: () => {item.instance = undefined;}
                 });
             }
         } else {
@@ -820,7 +820,7 @@ class DI {
             });
             if (eager && isSingleton) this.get(token);
         }
-        
+
         return this;
     }
 
