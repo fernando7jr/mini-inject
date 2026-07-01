@@ -1670,11 +1670,33 @@ test('Container: has and getBinding work correctly', (t) => {
     di.bind(plugins, PluginA);
 
     t.is(di.has(plugins), true);
-    
+
     const bindings = di.getBinding(plugins);
     t.true(Array.isArray(bindings));
     t.is(bindings.length, 1);
     t.is(typeof bindings[0].resolveFunction, 'function');
     t.is(bindings[0].isSingleton, true);
     t.is(bindings[0].lateResolve, false);
+});
+
+test('Should not instantiate uninitialized proxies during clear', (t) => {
+    let initialized = false;
+    class B {}
+    class LazyService {
+        constructor(b) {
+            initialized = true;
+        }
+        dispose() {}
+    }
+
+    const di = new DI();
+    di.bind(B, []);
+    di.bind(LazyService, [B], {lateResolve: true, isSingleton: true});
+
+    const proxyInstance = di.get(LazyService);
+    t.is(initialized, false, 'Should not be initialized yet');
+
+    di.clear();
+
+    t.is(initialized, false, 'Should not be initialized during clear');
 });
