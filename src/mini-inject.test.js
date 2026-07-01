@@ -1657,3 +1657,24 @@ test('Container: eager loading works for container items', (t) => {
     t.is(calls, 1); // Should use cached instance
     t.true(list[0] instanceof EagerPlugin);
 });
+
+test('Container: has and getBinding work correctly', (t) => {
+    class PluginA {}
+    const di = new DI();
+    const plugins = di.container('plugins');
+
+    t.is(di.has(plugins), false);
+    t.is(di.getBinding(plugins), undefined);
+
+    di.bind(PluginA, []);
+    di.bind(plugins, PluginA);
+
+    t.is(di.has(plugins), true);
+    
+    const bindings = di.getBinding(plugins);
+    t.true(Array.isArray(bindings));
+    t.is(bindings.length, 1);
+    t.is(typeof bindings[0].resolveFunction, 'function');
+    t.is(bindings[0].isSingleton, true);
+    t.is(bindings[0].lateResolve, false);
+});
