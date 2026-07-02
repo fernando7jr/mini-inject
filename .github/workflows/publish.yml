@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  pages: write
 
 jobs:
   publish:
@@ -76,11 +77,9 @@ jobs:
           echo "Version bump type determined: $BUMP"
 
       - name: Install dependencies
-        if: steps.bump_type.outputs.bump != 'none'
         run: npm ci
 
       - name: Run validation and tests
-        if: steps.bump_type.outputs.bump != 'none'
         run: |
           npm run build
           npm run validate
@@ -106,3 +105,15 @@ jobs:
         if: steps.bump_type.outputs.bump != 'none'
         run: |
           npm publish --provenance
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

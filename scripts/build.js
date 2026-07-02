@@ -3,10 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const sourceFile = path.join(__dirname, 'src', 'mini-inject.js');
-const sourceTypesFile = path.join(__dirname, 'src', 'mini-inject.d.ts');
-const sourceTestFile = path.join(__dirname, 'src', 'mini-inject.test.js');
-const distDir = __dirname;
+const sourceFile = path.join(__dirname, '..', 'src', 'mini-inject.js');
+const sourceTypesFile = path.join(__dirname, '..', 'src', 'mini-inject.d.ts');
+const sourceTestFile = path.join(__dirname, '..', 'src', 'mini-inject.test.js');
+const distDir = path.join(__dirname, '..');
 
 console.log('🔨 Building mini-inject distribution files...\n');
 
@@ -105,12 +105,15 @@ try {
     fs.writeFileSync(path.join(distDir, 'test', 'index.test.mjs'), esmTestCode);
     console.log('✅ Generated test/index.test.mjs (ES Module test)');
 
+    // Build documentation
+    require('./build-docs.js');
+
     console.log('\n🎉 Build completed successfully!');
     console.log('📦 Ready for npm publish with files:');
     console.log('   - index.js, index.cjs, index.mjs (JavaScript)');
     console.log('   - index.d.ts, index.d.mts (TypeScript definitions)');
     console.log('   - test/index.test.cjs, test/index.test.mjs (Test files)');
-    console.log('   - package.json, README.md, LICENSE');
+    console.log('   - package.json, README.md, LICENSE, docs/index.html');
 
 } catch (error) {
     console.error('❌ Build failed:', error.message);

@@ -3,6 +3,7 @@
 ![node test and build workflow](https://github.com/fernando7jr/mini-inject/actions/workflows/node.js.yml/badge.svg)
 [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/dwyl/esta/issues)
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ffernando7jr%2Fmini-inject.svg?type=shield&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Ffernando7jr%2Fmini-inject?ref=badge_shield&issueType=license)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ffernando7jr%2Fmini-inject.svg?type=shield&issueType=security)](https://app.fossa.com/projects/git%2Bgithub.com%2Ffernando7jr%2Fmini-inject?ref=badge_shield&issueType=security)
 
 Minimalistic dependency injection implementation without decorators (about 200kb after installing)
 

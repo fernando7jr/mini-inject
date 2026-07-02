@@ -1,7 +1,7 @@
 # Development files - not needed in published package
 src/
-build.js
-validate.js
+docs/
+scripts/
 DEVELOPMENT.md
 .prettierignore
 

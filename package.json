@@ -28,10 +28,10 @@
     }
   },
   "scripts": {
-    "build": "node build.js",
+    "build": "node scripts/build.js",
     "clean": "rm -f index.js index.cjs index.mjs index.d.ts index.d.mts && rm -rf test",
     "test": "ava",
-    "validate": "node validate.js",
+    "validate": "node scripts/validate.js",
     "prepublishOnly": "npm run build && npm run validate && npm test"
   },
   "repository": {
