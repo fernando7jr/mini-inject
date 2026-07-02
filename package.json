@@ -5,6 +5,9 @@
   "type": "commonjs",
   "main": "index.js",
   "module": "index.mjs",
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "bin": {
     "mini-inject": "./bin/analyze.mjs"
   },
