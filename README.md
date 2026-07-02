@@ -1,11 +1,16 @@
 # mini-inject
-Minimalistic dependency injection implementation without decorators (less than 100kb after installing)
+[![npm version](https://badge.fury.io/js/mini-inject.svg?cache_bypass=true)](https://badge.fury.io/js/mini-inject)
+![node test and build workflow](https://github.com/fernando7jr/mini-inject/actions/workflows/node.js.yml/badge.svg)
+[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/dwyl/esta/issues)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ffernando7jr%2Fmini-inject.svg?type=shield&issueType=license)](https://app.fossa.com/projects/git%2Bgithub.com%2Ffernando7jr%2Fmini-inject?ref=badge_shield&issueType=license)
+
+Minimalistic dependency injection implementation without decorators (about 200kb after installing)
 
 MiniInject is offered as both CommonJS and ESModule files and there are no dependencies except for testing
 
 The goal is to offer dependency injection as complete as possible with the most simple code that anyone can read
 
-Everything runs synchronously and no need to add a bunch of decorators everywhere. It works as intended and there is no blackbox or magic
+Everything runs synchronously and no need to add a bunch of decorators everywhere. It works as intended and there is no black-box or magic
 
 ## Installation
 
@@ -15,11 +20,11 @@ MiniInject is available as the [package mini-inject](https://www.npmjs.com/packa
 
 The package provides both cjs and mjs files along the type definitions.
 
-There is no need to install any type definition package, we provide all type declartions on `.d.ts` files and all public methods are documented with examples
+There is no need to install any type definition package, we provide all type declarations on `.d.ts` files and all public methods are documented with examples
 
 ## Support
 
-I am activaly working on this project.
+I am actively working on this project.
 
 Use the github page for opening issues or discussions.
 
@@ -48,7 +53,7 @@ class C {
 }
 
 const di = new DI();
-// Bind the classes A, B and C assigning a function for instanciation
+// Bind the classes A, B and C assigning a function for instantiation
 di
     .bind(A, (di) => new A(0))                       // A is a singleton dependency
     .bind(B, (di) => new B(), {isSingleton: false}) // B is not a singleton dependency
@@ -72,7 +77,7 @@ const b = di.get(B);
 console.log(b.value);   // B
 console.log(c.b.value); // BB
 
-// You can also fetch everythin in a single call
+// You can also fetch everything in a single call
 const [a2, b2, c2] = di.getAll(A, B, C);
 console.log(a2.value); // 0
 console.log(b2.value);   // B
@@ -204,7 +209,7 @@ console.log(b2.value); // 3
 
 There are three ways circular dependencies are handled, applied in this priority order:
 
-| Priority | Strategy | Behaviour |
+| Priority | Strategy | Behavior |
 |---|---|---|
 | 1 | `DI.autoResolveCircularDependencies(true)` | All instances auto-detect cycles. `lateResolve` flags are ignored. |
 | 2 | `instance.autoResolveCircularDependencies(true)` | Only this instance auto-detects cycles. Other instances are unaffected. |
@@ -548,11 +553,11 @@ console.log(list[0] instanceof PluginA); // true
 console.log(list[1] instanceof PluginB); // true
 ```
 
-The options parameter on `bind` also supports the `eager: boolean` flag. When set to `true`, `mini-inject` will instantiate the binding immediately after registration rather than waiting for the first `.get()` call. Note that this flag is expected to eventually replace the usage of manual `lateResolve` flags by encouraging early validation of the dependency tree.
+The options parameter on `bind` also supports the `eager: boolean` flag. When set to `true`, `mini-inject` will instantiate the binding immediately after registration rather than waiting for the first `.get()` call.
 
 ### Dependency Graph Analyzer
 
-`mini-inject` can generate a dependency graph for any DI module so you can understand the full dependency tree, spot potential optimisations, and detect circular dependencies before they cause problems at runtime.
+`mini-inject` can generate a dependency graph for any DI module so you can understand the full dependency tree, spot potential optimizations, and detect circular dependencies before they cause problems at runtime.
 
 #### Programmatic API
 
@@ -570,7 +575,7 @@ di.bind(UserService, [AuthService]);
 di.bind(OrderService, [UserService, AuthService]);
 di.bind(NotificationService, () => new NotificationService()); // custom factory
 
-// Get a serialisable graph object
+// Get a serializable graph object
 const graph = di.getDependencyGraph();
 // { nodes: [...], edges: [...], cycles: [] }
 console.log(JSON.stringify(graph, null, 2));
@@ -653,6 +658,16 @@ npx mini-inject analyze ./src/container.js --export=appDI
 
 ## Changelog
 
+#### 1.13.4
+
+* Added SECURITY.md
+* Included github actions
+* Executed `npm audit` and addressed all vulnerabilities
+
+#### 1.13.3
+
+* Small typescript interface correction
+
 #### 1.13.2
 
 * Fixed a critical bug in `di.clear()` where uninitialized Proxy instances (from `lateResolve: true`) were being eagerly instantiated just to check for a `dispose` method. Now, uninitialized proxies are correctly bypassed during clear.
@@ -678,7 +693,7 @@ npx mini-inject analyze ./src/container.js --export=appDI
 * Added `di.unbind(injectable)` — removes a single binding and its cached singleton instance; calls `dispose()` on the instance if the method exists, then removes both the binding and the cached value
 * Added `{ eager: true }` option to `bind()` — when set on a singleton binding, the instance is created immediately at bind time instead of lazily on first `get()`; silently ignored for transient bindings
 * `clear()` now calls `dispose()` on every cached singleton instance (and on sub-module instances recursively) before wiping the container, giving services a chance to release resources; errors thrown by `dispose()` are silently ignored
-* Added `di.getDependencyGraph()` / `DI.getDependencyGraph(di)` — returns a serialisable graph object (`{ nodes, edges, cycles }`) describing all registered bindings, their dependency descriptors, directed edges, and any detected circular-dependency cycles
+* Added `di.getDependencyGraph()` / `DI.getDependencyGraph(di)` — returns a serializable graph object (`{ nodes, edges, cycles }`) describing all registered bindings, their dependency descriptors, directed edges, and any detected circular-dependency cycles
 * Added `di.formatDependencyGraph(opts?)` / `DI.formatDependencyGraph(graph, opts?)` — renders a dependency graph as a human-readable text report; pass `{ header: false }` to suppress the title and cycles-summary section
 * Added `bin/analyze.mjs` CLI — run `npx mini-inject analyze <file>` to print a dependency report for any module that exports a `DI` instance; supports `--format=text|json`, `--export=<name>`, and `--no-header`
 * Dep descriptors distinguish between `injectable` keys, `Literal<value>`, `Factory<name>`, and `null` (custom factory function — deps cannot be statically determined)
@@ -689,7 +704,7 @@ npx mini-inject analyze ./src/container.js --export=appDI
 #### 1.11.0
 
 * Added `DI.autoResolveCircularDependencies(true/false)` — global static flag that automatically detects and resolves circular dependencies at runtime for all instances, without needing any `lateResolve` flags on bindings
-* Added `instance.autoResolveCircularDependencies(true/false)` — per-instance flag with the same behaviour, only affecting that specific `DI` instance. The global flag takes precedence
+* Added `instance.autoResolveCircularDependencies(true/false)` — per-instance flag with the same behavior, only affecting that specific `DI` instance. The global flag takes precedence
 * When neither auto mode nor `lateResolve` is used and a cycle is encountered, `get()` now throws a descriptive error listing the full dependency chain (e.g. `"Circular dependency detected: A → B → A"`) with instructions on how to fix it
 * Updated TypeScript declarations and JSDoc for all affected methods
 
@@ -711,7 +726,7 @@ npx mini-inject analyze ./src/container.js --export=appDI
 
 #### 1.8
 
-* Added factory for depencies
+* Added factory for dependencies
 
 #### 1.7
 

@@ -1,5 +1,5 @@
 import test from 'ava';
-import {DI} from './index.mjs';
+import { DI } from './index.mjs';
 
 const idGen = (function* () {
     let i = 0;
@@ -59,15 +59,15 @@ class A2 {
     }
 }
 
-class D {}
+class D { }
 
-test('Should bind as Singlethon', async (t) => {
+test('Should bind as Singleton', async (t) => {
     const di = new DI();
     di.bind(A, () => new A(5));
     di.bind(C, (di) => new C(di.get(A), di.get(B)));
     di.bind(B, () => new B(5));
 
-    const {a, b, c} = {
+    const { a, b, c } = {
         a: di.get(A),
         b: di.get(B),
         c: di.get(C),
@@ -87,13 +87,13 @@ test('Should bind as Singlethon', async (t) => {
     t.is(c.id, c2.id);
 });
 
-test('Should bind as Non-Singlethon', async (t) => {
+test('Should bind as Non-Singleton', async (t) => {
     const di = new DI();
-    di.bind(A, () => new A(5), {isSingleton: false});
-    di.bind(C, (di) => new C(di.get(A), di.get(B)), {isSingleton: false});
+    di.bind(A, () => new A(5), { isSingleton: false });
+    di.bind(C, (di) => new C(di.get(A), di.get(B)), { isSingleton: false });
     di.bind(B, () => new B(5));
 
-    const {a, b, c} = {
+    const { a, b, c } = {
         a: di.get(A),
         b: di.get(B),
         c: di.get(C),
@@ -127,7 +127,7 @@ test('Should accept symbols for binding', (t) => {
     t.notThrows(() => di.get(symbolB));
     t.notThrows(() => di.get(symbolC));
 
-    const {a, b, c} = {
+    const { a, b, c } = {
         a: di.get(symbolA),
         b: di.get(symbolB),
         c: di.get(symbolC),
@@ -140,7 +140,7 @@ test('Should accept symbols for binding', (t) => {
 
 test('Should solve the circular dependency problem through "getResolver"', (t) => {
     const di = new DI();
-    // Using function to isntanciate the classes
+    // Using function to instantiate the classes
     {
         di.bind(A1, () => new A1(5, di.get(A2)));
         di.bind(A2, () => new A2(2, di.getResolver(A1)));
@@ -171,12 +171,12 @@ test('Should solve the circular dependency problem through "getResolver"', (t) =
 
 test('Should throw when can not find a binding', (t) => {
     const di = new DI();
-    di.bind(A, () => new A(5), {isSingleton: false});
-    di.bind(C, (di) => new C(di.get(A), di.get(B)), {isSingleton: false});
+    di.bind(A, () => new A(5), { isSingleton: false });
+    di.bind(C, (di) => new C(di.get(A), di.get(B)), { isSingleton: false });
 
     t.notThrows(() => di.get(A));
-    t.throws(() => di.get(C), {message: 'No binding for injectable "B"'});
-    t.throws(() => di.get(B), {message: 'No binding for injectable "B"'});
+    t.throws(() => di.get(C), { message: 'No binding for injectable "B"' });
+    t.throws(() => di.get(B), { message: 'No binding for injectable "B"' });
     t.throws(() => di.get('TEST'), {
         message: 'No binding for injectable "TEST"',
     });
@@ -198,7 +198,7 @@ test('Should solve the circular dependency problem through "lateResolve"', (t) =
     };
 
     const di = new DI();
-    di.bind(A1, () => new A1(5, di.get(A2)), {lateResolve: true});
+    di.bind(A1, () => new A1(5, di.get(A2)), { lateResolve: true });
     di.bind(A2, () => new A2(2, di.get(A1)));
 
     const a1 = di.get(A1);
@@ -313,8 +313,8 @@ test('Should override lateResolve option when autoResolveCircularDependencies is
 
         const di = new DI();
         // lateResolve: true is ignored — auto mode takes precedence
-        di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)), {lateResolve: true});
-        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)), {lateResolve: true});
+        di.bind(ServiceA, () => new ServiceA(di.get(ServiceB)), { lateResolve: true });
+        di.bind(ServiceB, () => new ServiceB(di.get(ServiceA)), { lateResolve: true });
 
         const a = di.get(ServiceA);
         const b = di.get(ServiceB);
@@ -424,7 +424,7 @@ test('Instance-level autoResolveCircularDependencies should not affect other ins
     t.notThrows(() => diAuto.get(ServiceA));
 
     // Normal instance with mutual deps and no lateResolve will throw a descriptive error
-    t.throws(() => diNormal.get(ServiceA), {message: /Circular dependency detected/});
+    t.throws(() => diNormal.get(ServiceA), { message: /Circular dependency detected/ });
 });
 
 test('Global autoResolveCircularDependencies takes precedence over instance setting', (t) => {
@@ -499,7 +499,7 @@ test('Should auto bind using dependencies list', async (t) => {
     di.bind(B, () => new B(5));
     di.bind(C, [A, B]);
 
-    const {a, b, c} = {
+    const { a, b, c } = {
         a: di.get(A),
         b: di.get(B),
         c: di.get(C),
@@ -554,21 +554,21 @@ test('Should get all dependencies in a single call', async (t) => {
 
 test('Should use fallback when there is no binding', async (t) => {
     const di = new DI();
-    t.throws(() => di.get(A), {message: 'No binding for injectable "A"'});
+    t.throws(() => di.get(A), { message: 'No binding for injectable "A"' });
     const a = di.get(A, null);
     t.is(a, null);
 
     const bResolver = di.getResolver(B);
-    t.throws(() => bResolver.get(), {message: 'No binding for injectable "B"'});
+    t.throws(() => bResolver.get(), { message: 'No binding for injectable "B"' });
     const b = bResolver.get(undefined);
     t.is(b, undefined);
 });
 
 test('Should get the binding for injectables', async (t) => {
     const di = new DI();
-    di.bind(A, () => new A(5), {isSingleton: false});
+    di.bind(A, () => new A(5), { isSingleton: false });
     di.bind(B, () => new B(5));
-    di.bind(C, [A, B], {lateResolve: true});
+    di.bind(C, [A, B], { lateResolve: true });
 
     const testBinding = (binding, compareTo) => {
         t.truthy(binding);
@@ -578,16 +578,16 @@ test('Should get the binding for injectables', async (t) => {
         t.is(typeof binding.resolveFunction === 'function', true);
     };
 
-    testBinding(di.getBinding(A), {isSingleton: false, lateResolve: false});
-    testBinding(di.getBinding(B), {isSingleton: true, lateResolve: false});
-    testBinding(di.getBinding(C), {isSingleton: true, lateResolve: true});
+    testBinding(di.getBinding(A), { isSingleton: false, lateResolve: false });
+    testBinding(di.getBinding(B), { isSingleton: true, lateResolve: false });
+    testBinding(di.getBinding(C), { isSingleton: true, lateResolve: true });
     t.is(di.getBinding(A1), undefined);
     t.is(di.getBinding(A2), undefined);
 });
 
 test('Should override lateResolve to false when dependencies array is empty', async (t) => {
     const di = new DI();
-    di.bind(A, [], {lateResolve: true});
+    di.bind(A, [], { lateResolve: true });
 
     const binding = di.getBinding(A);
     t.truthy(binding);
@@ -779,7 +779,7 @@ test('Should handle factory dependencies', async (t) => {
     }
 
     n = 1;
-    di.bind(A, [di.factory(() => (n++) * 10)], {isSingleton: false});
+    di.bind(A, [di.factory(() => (n++) * 10)], { isSingleton: false });
     for (let i = 0; i < 10; i += 1) {
         const a = di.get(A);
         t.truthy(a);
@@ -793,7 +793,7 @@ test('Should accept tokens for binding', async (t) => {
     let tokenA = DI.token(A);
     let tokenB = DI.token(B);
     let tokenC = DI.token('150cc');
-    let tokenD = DI.token(class {get value() {return 'DD';} });
+    let tokenD = DI.token(class { get value() { return 'DD'; } });
 
     // Using the class method
     di.bind(tokenA, [DI.factory(() => 5)]);
@@ -816,7 +816,7 @@ test('Should accept tokens for binding', async (t) => {
     tokenA = di.token(A);
     tokenB = di.token(B);
     tokenC = di.token('150cc');
-    tokenD = di.token(class {get value() {return 'DD';} });
+    tokenD = di.token(class { get value() { return 'DD'; } });
 
     // Using the class method
     di.bind(tokenA, [di.factory(() => 5)]);
@@ -840,7 +840,7 @@ test('Should clear all containers and bindings', (t) => {
     const di = new DI();
 
     // Add some bindings and get instances
-    di.bind('testService', () => ({value: 'test'}));
+    di.bind('testService', () => ({ value: 'test' }));
     di.bind(A, [di.literal(42)]);
 
     // Verify bindings exist and containers have content
@@ -875,10 +875,10 @@ test('Should clear sub-modules recursively', (t) => {
     mainDI.subModule(subDI1, subDI2);
 
     // Add bindings to each level
-    mainDI.bind('mainService', () => ({value: 'main'}));
-    subDI1.bind('subService1', () => ({value: 'sub1'}));
-    subDI2.bind('subService2', () => ({value: 'sub2'}));
-    nestedSubDI.bind('nestedService', () => ({value: 'nested'}));
+    mainDI.bind('mainService', () => ({ value: 'main' }));
+    subDI1.bind('subService1', () => ({ value: 'sub1' }));
+    subDI2.bind('subService2', () => ({ value: 'sub2' }));
+    nestedSubDI.bind('nestedService', () => ({ value: 'nested' }));
 
     // Verify all bindings exist
     t.true(mainDI.has('mainService'));
@@ -913,8 +913,8 @@ test('Should clear singleton instances from container', (t) => {
     // Bind a singleton service that tracks instance creation
     di.bind('counter', () => {
         instanceCount++;
-        return {count: instanceCount};
-    }, {isSingleton: true});
+        return { count: instanceCount };
+    }, { isSingleton: true });
 
     // Get the singleton instance
     const instance1 = di.get('counter');
@@ -933,8 +933,8 @@ test('Should clear singleton instances from container', (t) => {
     // Re-bind the same service
     di.bind('counter', () => {
         instanceCount++;
-        return {count: instanceCount};
-    }, {isSingleton: true});
+        return { count: instanceCount };
+    }, { isSingleton: true });
 
     // Get a new instance after clearing
     const instance3 = di.get('counter');
@@ -965,7 +965,7 @@ test('Should clear late-resolved proxies', (t) => {
     }
 
     // Create circular dependency scenario with late resolve
-    di.bind(ServiceA, [ServiceB], {lateResolve: true});
+    di.bind(ServiceA, [ServiceB], { lateResolve: true });
     di.bind(ServiceB, () => new ServiceB());
 
     // Get the late-resolved service
@@ -991,13 +991,13 @@ test('Should allow re-binding after clear', (t) => {
     const di = new DI();
 
     // Initial binding
-    di.bind('service', () => ({version: 1}));
+    di.bind('service', () => ({ version: 1 }));
     const instance1 = di.get('service');
     t.is(instance1.version, 1);
 
     // Clear and re-bind with different implementation
     di.clear();
-    di.bind('service', () => ({version: 2}));
+    di.bind('service', () => ({ version: 2 }));
     const instance2 = di.get('service');
     t.is(instance2.version, 2);
     t.not(instance1, instance2);
@@ -1010,7 +1010,7 @@ test('Should clear empty containers without errors', (t) => {
     t.notThrows(() => di.clear());
 
     // Should still be able to bind after clearing empty container
-    di.bind('service', () => ({value: 'test'}));
+    di.bind('service', () => ({ value: 'test' }));
     t.true(di.has('service'));
     const instance = di.get('service');
     t.is(instance.value, 'test');
@@ -1032,7 +1032,7 @@ test('unbind should call dispose on cached singleton instance', (t) => {
     const di = new DI();
     let disposed = false;
     class MyService {
-        dispose() {disposed = true;}
+        dispose() { disposed = true; }
     }
     di.bind(MyService, []);
     di.get(MyService); // populate cache
@@ -1046,9 +1046,9 @@ test('unbind should not call dispose on non-singleton (not cached)', (t) => {
     const di = new DI();
     let disposed = false;
     class MyService {
-        dispose() {disposed = true;}
+        dispose() { disposed = true; }
     }
-    di.bind(MyService, [], {isSingleton: false});
+    di.bind(MyService, [], { isSingleton: false });
     di.get(MyService); // not cached
     di.unbind(MyService);
     t.false(disposed);
@@ -1072,8 +1072,8 @@ test('clear should call dispose on all cached singleton instances', (t) => {
     const di = new DI();
     const disposedLog = [];
     class ServiceX {
-        constructor(id) {this.id = id;}
-        dispose() {disposedLog.push(this.id);}
+        constructor(id) { this.id = id; }
+        dispose() { disposedLog.push(this.id); }
     }
     di.bind('x1', () => new ServiceX('x1'));
     di.bind('x2', () => new ServiceX('x2'));
@@ -1086,7 +1086,7 @@ test('clear should call dispose on all cached singleton instances', (t) => {
 test('clear should not throw when dispose throws', (t) => {
     const di = new DI();
     class BadService {
-        dispose() {throw new Error('dispose error');}
+        dispose() { throw new Error('dispose error'); }
     }
     di.bind(BadService, []);
     di.get(BadService);
@@ -1096,7 +1096,7 @@ test('clear should not throw when dispose throws', (t) => {
 test('clear should call dispose on sub-module cached instances', (t) => {
     const disposedLog = [];
     class SubService {
-        dispose() {disposedLog.push('sub');}
+        dispose() { disposedLog.push('sub'); }
     }
     const sub = new DI();
     sub.bind(SubService, []);
@@ -1113,21 +1113,21 @@ test('clear should call dispose on sub-module cached instances', (t) => {
 test('eager bind should instantiate singleton immediately', (t) => {
     let created = false;
     class EagerService {
-        constructor() {created = true;}
+        constructor() { created = true; }
     }
     const di = new DI();
     t.false(created);
-    di.bind(EagerService, [], {eager: true});
+    di.bind(EagerService, [], { eager: true });
     t.true(created);
 });
 
 test('eager bind should use same singleton instance on subsequent get', (t) => {
     let count = 0;
     class Counter {
-        constructor() {this.id = ++count;}
+        constructor() { this.id = ++count; }
     }
     const di = new DI();
-    di.bind(Counter, [], {eager: true});
+    di.bind(Counter, [], { eager: true });
     t.is(count, 1);
     const c = di.get(Counter);
     t.is(count, 1); // not created again
@@ -1137,17 +1137,17 @@ test('eager bind should use same singleton instance on subsequent get', (t) => {
 test('eager bind with isSingleton false should not instantiate', (t) => {
     let created = false;
     class EagerTransient {
-        constructor() {created = true;}
+        constructor() { created = true; }
     }
     const di = new DI();
-    di.bind(EagerTransient, [], {isSingleton: false, eager: true});
+    di.bind(EagerTransient, [], { isSingleton: false, eager: true });
     t.false(created); // eager is ignored for transients
 });
 
 test('eager bind with factory function', (t) => {
     let created = false;
     const di = new DI();
-    di.bind('eagerKey', () => {created = true; return {done: true};}, {eager: true});
+    di.bind('eagerKey', () => { created = true; return { done: true }; }, { eager: true });
     t.true(created);
     const val = di.get('eagerKey');
     t.is(val.done, true);
@@ -1298,9 +1298,9 @@ test('fork: dispose is called on fork-local singletons only on clear', (t) => {
 // ─── getDependencyGraph ───────────────────────────────────────────────────────
 
 test('getDependencyGraph: basic graph with no cycles', (t) => {
-    class Svc1 {}
-    class Svc2 {}
-    class Svc3 {}
+    class Svc1 { }
+    class Svc2 { }
+    class Svc3 { }
 
     const di = new DI();
     di.bind(Svc1, []);
@@ -1321,8 +1321,8 @@ test('getDependencyGraph: basic graph with no cycles', (t) => {
 
     const n3 = graph.nodes.find((n) => n.key === 'Svc3');
     t.deepEqual(n3.deps, [
-        {type: 'injectable', key: 'Svc1'},
-        {type: 'injectable', key: 'Svc2'},
+        { type: 'injectable', key: 'Svc1' },
+        { type: 'injectable', key: 'Svc2' },
     ]);
 
     const edgeSvc3Svc1 = graph.edges.find((e) => e.from === 'Svc3' && e.to === 'Svc1');
@@ -1331,7 +1331,7 @@ test('getDependencyGraph: basic graph with no cycles', (t) => {
 });
 
 test('getDependencyGraph: custom factory is marked unknown deps', (t) => {
-    class SvcA {}
+    class SvcA { }
 
     const di = new DI();
     di.bind(SvcA, () => new SvcA());
@@ -1344,12 +1344,12 @@ test('getDependencyGraph: custom factory is marked unknown deps', (t) => {
 });
 
 test('getDependencyGraph: detects circular dependency and marks edges', (t) => {
-    class NodeA {}
-    class NodeB {}
+    class NodeA { }
+    class NodeB { }
 
     const di = new DI();
     di.bind(NodeA, [NodeB]);
-    di.bind(NodeB, [NodeA], {lateResolve: true});
+    di.bind(NodeB, [NodeA], { lateResolve: true });
 
     const graph = di.getDependencyGraph();
 
@@ -1368,15 +1368,15 @@ test('getDependencyGraph: detects circular dependency and marks edges', (t) => {
 });
 
 test('getDependencyGraph: handles the A,B,C,D,E scenario', (t) => {
-    class SA {}
-    class SB {}
-    class SC {}
-    class SD {}
-    class SE {}
+    class SA { }
+    class SB { }
+    class SC { }
+    class SD { }
+    class SE { }
 
     const di = new DI();
     di.bind(SA, [SB]);
-    di.bind(SB, [SA], {lateResolve: true});
+    di.bind(SB, [SA], { lateResolve: true });
     di.bind(SC, [SA, SB]);
     di.bind(SD, [SA]);
     di.bind(SE, [SD, SC, SB]);
@@ -1400,7 +1400,7 @@ test('getDependencyGraph: handles the A,B,C,D,E scenario', (t) => {
 });
 
 test('getDependencyGraph: Token keys are displayed as Token<description>', (t) => {
-    class TokenSvc {}
+    class TokenSvc { }
 
     const di = new DI();
     const tok = DI.token(TokenSvc, 'myToken');
@@ -1413,7 +1413,7 @@ test('getDependencyGraph: Token keys are displayed as Token<description>', (t) =
 });
 
 test('getDependencyGraph: literal and factory deps are described correctly', (t) => {
-    class SvcWithMixedDeps {}
+    class SvcWithMixedDeps { }
 
     function namedFactory() {
         return 42;
@@ -1426,15 +1426,15 @@ test('getDependencyGraph: literal and factory deps are described correctly', (t)
     const node = graph.nodes[0];
 
     t.deepEqual(node.deps, [
-        {type: 'literal', value: true},
-        {type: 'factory', name: 'namedFactory'},
+        { type: 'literal', value: true },
+        { type: 'factory', name: 'namedFactory' },
     ]);
     // No edges since neither dep is an injectable node
     t.is(graph.edges.length, 0);
 });
 
 test('getDependencyGraph: anonymous factory dep has name null', (t) => {
-    class SvcAnon {}
+    class SvcAnon { }
 
     const di = new DI();
     di.bind(SvcAnon, [DI.factory(() => 99)]);
@@ -1447,8 +1447,8 @@ test('getDependencyGraph: anonymous factory dep has name null', (t) => {
 });
 
 test('getDependencyGraph: submodule bindings are marked isSubModule=true', (t) => {
-    class MainSvc {}
-    class SubSvc {}
+    class MainSvc { }
+    class SubSvc { }
 
     const sub = new DI();
     sub.bind(SubSvc, []);
@@ -1473,7 +1473,7 @@ test('getDependencyGraph: submodule bindings are marked isSubModule=true', (t) =
 });
 
 test('getDependencyGraph: static method delegates to instance method', (t) => {
-    class SvcS {}
+    class SvcS { }
 
     const di = new DI();
     di.bind(SvcS, []);
@@ -1485,10 +1485,10 @@ test('getDependencyGraph: static method delegates to instance method', (t) => {
 });
 
 test('getDependencyGraph: non-singleton bindings are marked correctly', (t) => {
-    class TransientSvc {}
+    class TransientSvc { }
 
     const di = new DI();
-    di.bind(TransientSvc, [], {isSingleton: false});
+    di.bind(TransientSvc, [], { isSingleton: false });
 
     const graph = di.getDependencyGraph();
     const node = graph.nodes[0];
@@ -1499,7 +1499,7 @@ test('getDependencyGraph: non-singleton bindings are marked correctly', (t) => {
 // ─── formatDependencyGraph ────────────────────────────────────────────────────
 
 test('formatDependencyGraph: includes header by default', (t) => {
-    class HSvc {}
+    class HSvc { }
 
     const di = new DI();
     di.bind(HSvc, []);
@@ -1512,23 +1512,23 @@ test('formatDependencyGraph: includes header by default', (t) => {
 });
 
 test('formatDependencyGraph: header can be disabled', (t) => {
-    class NoHSvc {}
+    class NoHSvc { }
 
     const di = new DI();
     di.bind(NoHSvc, []);
 
-    const text = di.formatDependencyGraph({header: false});
+    const text = di.formatDependencyGraph({ header: false });
 
     t.false(text.includes('mini-inject dependency graph'));
 });
 
 test('formatDependencyGraph: shows cycle warning on affected rows', (t) => {
-    class CycA {}
-    class CycB {}
+    class CycA { }
+    class CycB { }
 
     const di = new DI();
     di.bind(CycA, [CycB]);
-    di.bind(CycB, [CycA], {lateResolve: true});
+    di.bind(CycB, [CycA], { lateResolve: true });
 
     const text = di.formatDependencyGraph();
 
@@ -1539,31 +1539,31 @@ test('formatDependencyGraph: shows cycle warning on affected rows', (t) => {
 });
 
 test('formatDependencyGraph: shows lateResolve tag', (t) => {
-    class LRA {}
-    class LRB {}
+    class LRA { }
+    class LRB { }
 
     const di = new DI();
     di.bind(LRA, [LRB]);
-    di.bind(LRB, [LRA], {lateResolve: true});
+    di.bind(LRB, [LRA], { lateResolve: true });
 
-    const text = di.formatDependencyGraph({header: false});
+    const text = di.formatDependencyGraph({ header: false });
 
     t.true(text.includes('lateResolve'));
 });
 
 test('formatDependencyGraph: marks custom factory as unknown deps', (t) => {
-    class CustomSvc {}
+    class CustomSvc { }
 
     const di = new DI();
     di.bind(CustomSvc, () => new CustomSvc());
 
-    const text = di.formatDependencyGraph({header: false});
+    const text = di.formatDependencyGraph({ header: false });
 
     t.true(text.includes('(custom initializer - unknown deps)'));
 });
 
 test('formatDependencyGraph: static method accepts pre-computed graph', (t) => {
-    class StaticFmtSvc {}
+    class StaticFmtSvc { }
 
     const di = new DI();
     di.bind(StaticFmtSvc, []);
@@ -1576,7 +1576,7 @@ test('formatDependencyGraph: static method accepts pre-computed graph', (t) => {
 });
 
 test('formatDependencyGraph: literal and factory deps are rendered in text', (t) => {
-    class MixedDepSvc {}
+    class MixedDepSvc { }
 
     function buildValue() {
         return 'x';
@@ -1585,15 +1585,15 @@ test('formatDependencyGraph: literal and factory deps are rendered in text', (t)
     const di = new DI();
     di.bind(MixedDepSvc, [DI.literal(42), DI.factory(buildValue)]);
 
-    const text = di.formatDependencyGraph({header: false});
+    const text = di.formatDependencyGraph({ header: false });
 
     t.true(text.includes('Literal<42>'));
     t.true(text.includes('Factory<buildValue>'));
 });
 
 test('Container: allows binding multiple injectables and returns an array', (t) => {
-    class PluginA {value = 'A';}
-    class PluginB {value = 'B';}
+    class PluginA { value = 'A'; }
+    class PluginB { value = 'B'; }
 
     const di = new DI();
     const plugins = di.container('plugins');
@@ -1612,14 +1612,14 @@ test('Container: allows binding multiple injectables and returns an array', (t) 
 });
 
 test('Container: handles singleton and transient bindings correctly', (t) => {
-    class PluginA {constructor() {this.id = Math.random();} }
-    class PluginB {constructor() {this.id = Math.random();} }
+    class PluginA { constructor() { this.id = Math.random(); } }
+    class PluginB { constructor() { this.id = Math.random(); } }
 
     const di = new DI();
     const plugins = di.container('plugins');
 
-    di.bind(plugins, () => new PluginA(), {isSingleton: true});
-    di.bind(plugins, () => new PluginB(), {isSingleton: false});
+    di.bind(plugins, () => new PluginA(), { isSingleton: true });
+    di.bind(plugins, () => new PluginB(), { isSingleton: false });
 
     const list1 = di.get(plugins);
     const list2 = di.get(plugins);
@@ -1629,7 +1629,7 @@ test('Container: handles singleton and transient bindings correctly', (t) => {
 });
 
 test('Container: works with factories and dependencies', (t) => {
-    class Dep {value = 'Dep';}
+    class Dep { value = 'Dep'; }
     const di = new DI();
     const plugins = di.container('plugins');
 
@@ -1643,13 +1643,13 @@ test('Container: works with factories and dependencies', (t) => {
 
 test('Container: eager loading works for container items', (t) => {
     let calls = 0;
-    class EagerPlugin {constructor() {calls++;} }
+    class EagerPlugin { constructor() { calls++; } }
 
     const di = new DI();
     const plugins = di.container('plugins');
 
     di.bind(EagerPlugin, []);
-    di.bind(plugins, EagerPlugin, {eager: true});
+    di.bind(plugins, EagerPlugin, { eager: true });
 
     t.is(calls, 1); // Should be called immediately
 
@@ -1659,7 +1659,7 @@ test('Container: eager loading works for container items', (t) => {
 });
 
 test('Container: has and getBinding work correctly', (t) => {
-    class PluginA {}
+    class PluginA { }
     const di = new DI();
     const plugins = di.container('plugins');
 
@@ -1681,17 +1681,17 @@ test('Container: has and getBinding work correctly', (t) => {
 
 test('Should not instantiate uninitialized proxies during clear', (t) => {
     let initialized = false;
-    class B {}
+    class B { }
     class LazyService {
         constructor(b) {
             initialized = true;
         }
-        dispose() {}
+        dispose() { }
     }
 
     const di = new DI();
     di.bind(B, []);
-    di.bind(LazyService, [B], {lateResolve: true, isSingleton: true});
+    di.bind(LazyService, [B], { lateResolve: true, isSingleton: true });
 
     const proxyInstance = di.get(LazyService);
     t.is(initialized, false, 'Should not be initialized yet');

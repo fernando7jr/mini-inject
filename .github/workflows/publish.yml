@@ -1,0 +1,95 @@
+name: Version and Publish
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing requires npm >= 11.5.1
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run validation and tests
+        run: |
+          npm run build
+          npm run validate
+          npm test
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version bump type
+        id: bump_type
+        run: |
+          LABELS='${{ toJson(github.event.pull_request.labels) }}'
+          TITLE='${{ github.event.pull_request.title }}'
+          BUMP=""
+          
+          # Check labels first (case-insensitive)
+          if echo "$LABELS" | grep -qi '"name":\s*"major"'; then
+            BUMP="major"
+          elif echo "$LABELS" | grep -qi '"name":\s*"minor"'; then
+            BUMP="minor"
+          elif echo "$LABELS" | grep -qi -E '"name":\s*"(patch|fix|bug)"'; then
+            BUMP="patch"
+          fi
+          
+          # Fallback to Conventional Commits parsing from PR title
+          if [ -z "$BUMP" ]; then
+            if echo "$TITLE" | grep -Ei -q '^(feat|fix|refactor|perf|chore|docs|style|test|ci|build)(\(.+\))?!:'; then
+              BUMP="major"
+            elif echo "$TITLE" | grep -i -q "BREAKING CHANGE"; then
+              BUMP="major"
+            elif echo "$TITLE" | grep -Ei -q '^feat(\(.+\))?:'; then
+              BUMP="minor"
+            elif echo "$TITLE" | grep -Ei -q '^(fix|refactor|perf|chore|docs|style|test|ci|build)(\(.+\))?:'; then
+              BUMP="patch"
+            fi
+          fi
+          
+          # Default to patch if no labels or conventional prefix match
+          if [ -z "$BUMP" ]; then
+            BUMP="patch"
+          fi
+          
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+          echo "Version bump type determined: $BUMP"
+
+      - name: Bump version
+        run: |
+          npm version ${{ steps.bump_type.outputs.bump }} -m "chore: bump version to %s [skip ci]"
+
+      - name: Push version bump
+        run: |
+          git push origin main --follow-tags
+
+      - name: Publish to npm
+        run: |
+          npm publish --provenance

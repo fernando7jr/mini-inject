@@ -2,7 +2,7 @@ declare const _tokenSymbol: unique symbol;
 declare const _containerSymbol: unique symbol;
 
 export type ClassType = (Function | Object) & { name: string };
-export type ClassConstructor<T> = ClassType & { new (...args: any): T };
+export type ClassConstructor<T> = ClassType & { new(...args: any): T };
 export type Injectable<T> = ClassConstructor<T> | string | Symbol;
 export type InjectableOrToken<T> = Injectable<T> | Token<T>;
 export type AnyInjectable<T> = Injectable<T> | Token<T> | Container<T>;
@@ -10,12 +10,12 @@ export type AnyInjectable<T> = Injectable<T> | Token<T> | Container<T>;
 /** Resolves the underlying type of an injectable parameter */
 export type ResolveInjectable<I, Fallback = any> =
   I extends Container<infer T>
-    ? T[]
-    : I extends Token<infer T>
-      ? T
-      : I extends ClassConstructor<infer T>
-        ? T
-        : Fallback;
+  ? T[]
+  : I extends Token<infer T>
+  ? T
+  : I extends ClassConstructor<infer T>
+  ? T
+  : Fallback;
 
 export type InjectableParam<T> =
   T extends AnyInjectable<any> ? T : AnyInjectable<T>;
@@ -193,7 +193,7 @@ export class Token<T> {
   constructor(injectable: Injectable<T>, description?: string);
 
   /**
-   * The injectable which the token is refering
+   * The injectable which the token is referring
    */
   readonly value: T;
 
@@ -235,7 +235,7 @@ export class Container<T> {
   constructor(injectable: InjectableOrToken<T>, description?: string);
 
   /**
-   * The injectable which the container is refering
+   * The injectable which the container is referring
    */
   readonly value: T;
 
@@ -259,8 +259,8 @@ export interface DIResolver<T> {
    *  }
    * }
    * class B {
-   *  constructor (aResovler) {
-   *      this.#aResovler = aResovler;
+   *  constructor (aResolver) {
+   *      this.#aResolver = aResolver;
    *  }
    *
    *  get a() {
@@ -346,7 +346,7 @@ export class DILiteral<T> {
 
 /**
  * A dependency which is retrieved on demand through a factory function.
- * This can be used to assign parameters which are not part or have no binding such as primitives (number, boolean, string), plain objects or anyhting that need an instanciation logic that does not fit a DILiteral.
+ * This can be used to assign parameters which are not part or have no binding such as primitives (number, boolean, string), plain objects or anything that need an instantiation logic that does not fit a DILiteral.
  * Rather than using this class directly, prefer to use the method `factory`.
  * @see DI.factory for how to assign literals
  * @example
@@ -390,7 +390,7 @@ export class DI {
   constructor();
 
   /**
-   * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
+   * Create a `literal` dependency which will be passed directly as parameter instead of resolving it
    * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
    * @param value any value which does not need a binding and will be used as is instead of resolving an instance from an `injectable` or `key`
    * @returns the `literal` wrapper object
@@ -424,7 +424,7 @@ export class DI {
   static literal<T>(value: T): DILiteral<T>;
 
   /**
-   * Create a depedency which is resolved through a `factory` instead of resolving it.
+   * Create a dependency which is resolved through a `factory` instead of resolving it.
    * `mini-inject` automatically differentiate `factory` from `injectables` when resolving dependencies.
    * @param fn any factory method which accepts the DI instance as the first parameter
    * @returns the `factory` wrapper object
@@ -535,7 +535,7 @@ export class DI {
   static autoResolveCircularDependencies(enabled: boolean): void;
 
   /**
-   * Create a `literal` depedency which will be passed directly as parameter instead of resolving it
+   * Create a `literal` dependency which will be passed directly as parameter instead of resolving it
    * `mini-inject` automatically differentiate `literal` from `injectables` when resolving dependencies
    * This method is the same as calling `DI.literal` rather than using the instance
    * @param value any value which does not need a binding and will be used as is instead of resolving an instance from an `injectable` or `key`
@@ -570,7 +570,7 @@ export class DI {
   literal<T>(value: T): DILiteral<T>;
 
   /**
-   * Create a depedency which is resolved through a `factory` instead of resolving it.
+   * Create a dependency which is resolved through a `factory` instead of resolving it.
    * `mini-inject` automatically differentiate `factory` from `injectables` when resolving dependencies.
    * @param fn any factory method which accepts the DI instance as the first parameter
    * @returns the `factory` wrapper object
@@ -685,14 +685,14 @@ export class DI {
    * Bindings declared with a custom factory function have `deps: null` because
    * the dependencies cannot be statically determined at analysis time.
    *
-   * The graph can be serialised directly with `JSON.stringify` for JSON output.
+   * The graph can be serialized directly with `JSON.stringify` for JSON output.
    */
   getDependencyGraph(): DependencyGraph;
 
   /**
    * Build a dependency graph for the given DI module.
    * Convenience static wrapper around the instance method.
-   * @param di The DI instance to analyse.
+   * @param di The DI instance to analyze.
    */
   static getDependencyGraph(di: DI): DependencyGraph;
 
@@ -903,21 +903,21 @@ export class DI {
     injectable2: InjectableParam<T2>,
     injectable3: InjectableParam<T3>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+    ];
   getAll<T1, T2, T3, T4>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
     injectable3: InjectableParam<T3>,
     injectable4: InjectableParam<T4>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+    ];
   getAll<T1, T2, T3, T4, T5>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -925,12 +925,12 @@ export class DI {
     injectable4: InjectableParam<T4>,
     injectable5: InjectableParam<T5>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -939,13 +939,13 @@ export class DI {
     injectable5: InjectableParam<T5>,
     injectable6: InjectableParam<T6>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -955,14 +955,14 @@ export class DI {
     injectable6: InjectableParam<T6>,
     injectable7: InjectableParam<T7>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -973,15 +973,15 @@ export class DI {
     injectable7: InjectableParam<T7>,
     injectable8: InjectableParam<T8>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -993,16 +993,16 @@ export class DI {
     injectable8: InjectableParam<T8>,
     injectable9: InjectableParam<T9>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-    ResolveInjectable<T9, T9>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -1015,17 +1015,17 @@ export class DI {
     injectable9: InjectableParam<T9>,
     injectable10: InjectableParam<T10>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-    ResolveInjectable<T9, T9>,
-    ResolveInjectable<T10, T10>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -1039,18 +1039,18 @@ export class DI {
     injectable10: InjectableParam<T10>,
     injectable11: InjectableParam<T11>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-    ResolveInjectable<T9, T9>,
-    ResolveInjectable<T10, T10>,
-    ResolveInjectable<T11, T11>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -1065,19 +1065,19 @@ export class DI {
     injectable11: InjectableParam<T11>,
     injectable12: InjectableParam<T12>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-    ResolveInjectable<T9, T9>,
-    ResolveInjectable<T10, T10>,
-    ResolveInjectable<T11, T11>,
-    ResolveInjectable<T12, T12>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+      ResolveInjectable<T12, T12>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -1093,20 +1093,20 @@ export class DI {
     injectable12: InjectableParam<T12>,
     injectable13: InjectableParam<T13>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-    ResolveInjectable<T9, T9>,
-    ResolveInjectable<T10, T10>,
-    ResolveInjectable<T11, T11>,
-    ResolveInjectable<T12, T12>,
-    ResolveInjectable<T13, T13>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+      ResolveInjectable<T12, T12>,
+      ResolveInjectable<T13, T13>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -1123,21 +1123,21 @@ export class DI {
     injectable13: InjectableParam<T13>,
     injectable14: InjectableParam<T14>,
   ): [
-    ResolveInjectable<T1, T1>,
-    ResolveInjectable<T2, T2>,
-    ResolveInjectable<T3, T3>,
-    ResolveInjectable<T4, T4>,
-    ResolveInjectable<T5, T5>,
-    ResolveInjectable<T6, T6>,
-    ResolveInjectable<T7, T7>,
-    ResolveInjectable<T8, T8>,
-    ResolveInjectable<T9, T9>,
-    ResolveInjectable<T10, T10>,
-    ResolveInjectable<T11, T11>,
-    ResolveInjectable<T12, T12>,
-    ResolveInjectable<T13, T13>,
-    ResolveInjectable<T14, T14>,
-  ];
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+      ResolveInjectable<T12, T12>,
+      ResolveInjectable<T13, T13>,
+      ResolveInjectable<T14, T14>,
+    ];
   getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(
     injectable1: InjectableParam<T1>,
     injectable2: InjectableParam<T2>,
@@ -1156,23 +1156,23 @@ export class DI {
     injectable15: InjectableParam<T15>,
     ...injectables: AnyInjectable<any>[]
   ): [
-    T1,
-    T2,
-    T3,
-    T4,
-    T5,
-    T6,
-    T7,
-    T8,
-    T9,
-    T10,
-    T11,
-    T12,
-    T13,
-    T14,
-    T15,
-    ...unknown[],
-  ];
+      T1,
+      T2,
+      T3,
+      T4,
+      T5,
+      T6,
+      T7,
+      T8,
+      T9,
+      T10,
+      T11,
+      T12,
+      T13,
+      T14,
+      T15,
+      ...unknown[],
+    ];
 
   /**
    * Get an object with a method to get an instance of the class binding
@@ -1259,7 +1259,7 @@ export class DI {
    * Passing a non constructable class or function along an array of dependencies will throw an error. Tokens are acceptable though
    *
    * @param injectable an injectable class used for the binding. Must be a constructable class or function
-   * @param dependencies array of dependencies to be used when instanciating the injectable. The most be specified at the same order that the constructor parameters
+   * @param dependencies array of dependencies to be used when instantiating the injectable. The most be specified at the same order that the constructor parameters
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
    * @param opts.lateResolve optional param to defer instantiation of this injectable until the first time a property is accessed on it.
    * When `true`, a transparent `Proxy` is stored in the container immediately and the real instance is created on first access.
@@ -1295,7 +1295,7 @@ export class DI {
   /**
    * Bind a class or another constructable object so it can be fetched later
    * @param injectable an injectable class or a string key-value used for the binding
-   * @param func the function called when it should instanciate the object
+   * @param func the function called when it should instantiate the object
    * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
    * @param opts.lateResolve optional param to defer instantiation of this injectable until the first time a property is accessed on it.
    * When `true`, a transparent `Proxy` is stored in the container immediately and the real instance is created on first access.
