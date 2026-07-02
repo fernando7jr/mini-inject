@@ -13,6 +13,8 @@ The goal is to offer dependency injection as complete as possible with the most 
 
 Everything runs synchronously and no need to add a bunch of decorators everywhere. It works as intended and there is no black-box or magic
 
+Please refer to the [documentation](https://fernando7jr.github.io/mini-inject/) or follow this readme.
+
 ## Installation
 
 MiniInject is available as the [package mini-inject](https://www.npmjs.com/package/mini-inject).
@@ -658,6 +660,10 @@ npx mini-inject analyze ./src/container.js --export=appDI
 ```
 
 ## Changelog
+
+#### 1.13.5 and 1.13.6
+
+* Published the documentation online
 
 #### 1.13.4
 

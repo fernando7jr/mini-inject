@@ -1,5 +1,9 @@
 # Changelog
 
+#### 1.13.5 and 1.13.6
+
+* Published the documentation online
+
 #### 1.13.4
 * Added SECURITY.md
 * Included github actions

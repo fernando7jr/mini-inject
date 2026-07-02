@@ -49,7 +49,7 @@
   "bugs": {
     "url": "https://github.com/fernando7jr/mini-inject/issues"
   },
-  "homepage": "https://github.com/fernando7jr/mini-inject#readme",
+  "homepage": "https://fernando7jr.github.io/mini-inject/",
   "ava": {
     "files": [
       "test/**/*"
