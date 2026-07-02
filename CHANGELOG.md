@@ -1,5 +1,15 @@
 # Changelog
 
+#### 1.14.0
+
+* Introduced a global DI container accessible via `DI` static proxy methods (`DI.bind`, `DI.get`, `DI.has`, etc.), eliminating the need to explicitly instantiate `new DI()` for most use cases.
+* Added `DI.runInContext(callback)` to execute a function within a scoped, isolated DI context while preserving the static global API shape, perfect for testing isolation or contextual flows.
+* Improved `removeSubModule` behavior and added new comprehensive tests for the sub-module lifecycle.
+* Fixed formatting and dependency tracking bugs for `Container` instances containing `DILiteral` and `DIFactory` dependencies.
+* Ensured graceful fallback and cleanup of cyclic Proxies when errors occur during automatic circular dependency resolution.
+* Greatly simplified `README.md` and moved extensive reference documentation and guides to the official GitHub Pages site.
+* Implemented extensive test coverage improvements across edge-cases.
+
 #### 1.13.5 and 1.13.6
 
 * Published the documentation online

@@ -638,8 +638,745 @@ export class DI {
    */
   token<T>(injectable: Injectable<T>, description?: string): Token<T>;
 
+  /**
+   * Get a container by injectable or token.
+   * A container is a wrapper around a binding that exposes methods to interact with it.
+   * @param injectable The injectable or token to get a container for.
+   * @example
+   * ```javascript
+   * const di = new DI();
+   * di.bind('service', () => ({ value: 'test' }));
+   *
+   * const container = di.container('service');
+   * console.log(container.get()); // { value: 'test' }
+   * ```
+   */
   container<T>(injectable: InjectableOrToken<T>): Container<T>;
+  /**
+   * Get a container by injectable or token.
+   * A container is a wrapper around a binding that exposes methods to interact with it.
+   * @param injectable The injectable or token to get a container for.
+   * @param description An optional string description which is used for generating the symbol
+   * @example
+   * ```javascript
+   * const di = new DI();
+   * di.bind('service', () => ({ value: 'test' }));
+   *
+   * const container = di.container('service');
+   * console.log(container.get()); // { value: 'test' }
+   * ```
+   */
   container<T>(injectable: Injectable<T>, description?: string): Container<T>;
+
+  /**
+   * Set a new context for the given di instance, so any call that uses the global DI container will use the provided instance instead.
+   * The global DI instance is set to the provided instance for the duration of the callback function and reset to its previous value after the callback function returns.
+   * @param di The DI instance to set as the global DI instance for the duration of the callback.
+   * @param callback The callback function to execute in the context of the given DI instance.
+   * @returns The value returned by the callback function.
+   * @example
+   * ```javascript
+   * const di = new DI();
+   * di.bind('service', () => ({ value: 'test' }));
+   *
+   * DI.runInContext(di, () => {
+   *   console.log(di.get('service')); // { value: 'test' }
+   * });
+   * ```
+   */
+  static runInContext<T>(di: DI, callback: () => T): T;
+
+  /**
+   * Get the binding for the injectable if available otherwise return undefined
+   * The binding consists of its parameters and a resolving function for returning the instance
+   * Only known parameters are returned
+   * @param injectable an injectable class or a string key-value used for the binding
+   * @returns the binding if available otherwise undefined
+   */
+  static getBinding<T>(
+    injectable: InjectableOrToken<T>,
+  ):
+    | { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T }
+  /**
+   * Get the bindings for the container if available otherwise return undefined
+   * Each binding consists of its parameters and a resolving function for returning the instance
+   * Only known parameters are returned
+   * @param container the container used for the bindings
+   * @returns A copy array of all the bindings for the container. If not bindings then an empty array is returned
+   */
+  static getBinding<T>(
+    container: Container<T>,
+  ): { isSingleton: boolean; lateResolve: boolean; resolveFunction: () => T }[];
+  /**
+   * Check if the module has a binding for an injectable
+   * @param injectable an injectable class or a string key-value used for the binding
+   * @returns true if the binding exists otherwise false
+   */
+  static has<T>(injectable: AnyInjectable<T>): boolean;
+  /**
+   * Get an instance for the previously class binding.
+   *
+   * **Circular dependency handling** — three strategies are available, applied in priority order:
+   * 1. **Auto mode** (`DI.autoResolveCircularDependencies(true)` or `instance.autoResolveCircularDependencies(true)`)
+   *    — cycles are detected at runtime; only the binding caught in the cycle receives a lazy `Proxy`.
+   *    No `lateResolve` flag needed on any binding.
+   * 2. **Manual `lateResolve`** — mark one binding with `{ lateResolve: true }` to break the cycle with a `Proxy`
+   *    (ignored when auto mode is active).
+   * 3. **Neither** — if a cycle is encountered, `get()` throws immediately with a descriptive error that lists the
+   *    full dependency chain (e.g. `"Circular dependency detected: A → B → A"`) and instructions on how to fix it.
+   *
+   * @param injectable an injectable class or a string key-value used for the binding
+   * @returns an instance of T
+   *
+   * @example
+   * ```javascript
+   * class A {
+   *   meow() {
+   *     console.log('Meow!!');
+   *   }
+   * }
+   * class B {
+   *   bark() {
+   *     console.log('Bark!!');
+   *   }
+   * }
+   * class C {
+   *   constructor(a, b) {
+   *     this.a = a;
+   *     this.b = b;
+   *   }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(A, []);     // generates (di) => new A()
+   * di.bind(B, []);     // generates (di) => new B()
+   * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+   *
+   * const a = di.get(A);
+   * console.log(a.meow()); // Meow!!
+   *
+   * const b = di.get(B);
+   * console.log(b.bark()); // Bark!!
+   *
+   * const c = di.get(C);
+   * console.log(c.a.meow()); // Meow!!
+   * console.log(c.b.bark()); // Bark!!
+   * ```
+   *
+   */
+  static get<T>(injectable: InjectableOrToken<T>): T;
+  /**
+   * Get an instance for the previously class binding
+   * If the injectable has no binding it will return the value of `fallbackToValue`
+   * Please keep in mind that if the binding method throws an exception the error will still happen.
+   * This param only avoid throwing "No binding for injectable" when the unavailable binding is the top one
+   * @param fallbackToValue any value which can work as fallback in case the binding does not exists
+   * @returns an instance of T or F where T and F are the template params for this method. Vide the method signature
+   *
+   * @example
+   * ```javascript
+   * class A {
+   *   meow() {
+   *     console.log('Meow!!');
+   *   }
+   * }
+   * class B {
+   *   bark() {
+   *     console.log('Bark!!');
+   *   }
+   * }
+   * class C {
+   *   constructor(a, b) {
+   *     this.a = a;
+   *     this.b = b;
+   *   }
+   * }
+   * class D {}
+   *
+   * const di = new DI();
+   * di.bind(A, []);     // generates (di) => new A()
+   * di.bind(B, []);     // generates (di) => new B()
+   * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+   *
+   * const a = di.get(A);
+   * console.log(a.meow()); // Meow!!
+   *
+   * const b = di.get(B);
+   * console.log(b.bark()); // Bark!!
+   *
+   * const c = di.get(C);
+   * console.log(c.a.meow()); // Meow!!
+   * console.log(c.b.bark()); // Bark!!
+   *
+   * const d = di.get(D, null); // D is `null` since there is no binding for D. This does not thrown an error
+   * const d2 = di.get(D); // This will thrown an error since there is no fallback for D
+   * ```
+   *
+   */
+  static get<T, F>(injectable: InjectableOrToken<T>, fallbackToValue: F): T | F;
+  /**
+   * Get all instances for the previously container bindings
+   * @param container the container used for the bindings
+   * @param fallbackToEmptyList if true, returns an empty array if no bindings are found; otherwise, throws an error
+   * @returns an array of instances
+   */
+  static get<T>(container: Container<T>, fallbackToEmptyList?: boolean): T[];
+  /**
+   * Get all instances for the previously class bindings
+   * @param injectables an array of injectable classes or string key-value used for the binding. See the example
+   * @returns an array of instances
+   *
+   * @example
+   * ```javascript
+   * class A {
+   *   meow() {
+   *     console.log('Meow!!');
+   *   }
+   * }
+   * class B {
+   *   bark() {
+   *     console.log('Bark!!');
+   *   }
+   * }
+   * class C {
+   *   constructor(a, b) {
+   *     this.a = a;
+   *     this.b = b;
+   *   }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(A, []);     // generates (di) => new A()
+   * di.bind(B, []);     // generates (di) => new B()
+   * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+   *
+   * const [a, b, c] = di.getAll(A, B, C);
+   * console.log(a.meow()); // Meow!!
+   *
+   * const b = di.get(B);
+   * console.log(b.bark()); // Bark!!
+   * console.log(c.a.meow()); // Meow!!
+   * console.log(c.b.bark()); // Bark!!
+   * ```
+   *
+   */
+  static getAll<T1>(injectable1: InjectableParam<T1>): [ResolveInjectable<T1, T1>];
+  static getAll<T1, T2>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+  ): [ResolveInjectable<T1, T1>, ResolveInjectable<T2, T2>];
+  static getAll<T1, T2, T3>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+    ];
+  static getAll<T1, T2, T3, T4>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+    ];
+  static getAll<T1, T2, T3, T4, T5>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+      ResolveInjectable<T12, T12>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+    injectable13: InjectableParam<T13>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+      ResolveInjectable<T12, T12>,
+      ResolveInjectable<T13, T13>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+    injectable13: InjectableParam<T13>,
+    injectable14: InjectableParam<T14>,
+  ): [
+      ResolveInjectable<T1, T1>,
+      ResolveInjectable<T2, T2>,
+      ResolveInjectable<T3, T3>,
+      ResolveInjectable<T4, T4>,
+      ResolveInjectable<T5, T5>,
+      ResolveInjectable<T6, T6>,
+      ResolveInjectable<T7, T7>,
+      ResolveInjectable<T8, T8>,
+      ResolveInjectable<T9, T9>,
+      ResolveInjectable<T10, T10>,
+      ResolveInjectable<T11, T11>,
+      ResolveInjectable<T12, T12>,
+      ResolveInjectable<T13, T13>,
+      ResolveInjectable<T14, T14>,
+    ];
+  static getAll<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(
+    injectable1: InjectableParam<T1>,
+    injectable2: InjectableParam<T2>,
+    injectable3: InjectableParam<T3>,
+    injectable4: InjectableParam<T4>,
+    injectable5: InjectableParam<T5>,
+    injectable6: InjectableParam<T6>,
+    injectable7: InjectableParam<T7>,
+    injectable8: InjectableParam<T8>,
+    injectable9: InjectableParam<T9>,
+    injectable10: InjectableParam<T10>,
+    injectable11: InjectableParam<T11>,
+    injectable12: InjectableParam<T12>,
+    injectable13: InjectableParam<T13>,
+    injectable14: InjectableParam<T14>,
+    injectable15: InjectableParam<T15>,
+    ...injectables: AnyInjectable<any>[]
+  ): [
+      T1,
+      T2,
+      T3,
+      T4,
+      T5,
+      T6,
+      T7,
+      T8,
+      T9,
+      T10,
+      T11,
+      T12,
+      T13,
+      T14,
+      T15,
+      ...unknown[],
+    ];
+  /**
+   * Get an object with a method to get an instance of the class binding
+   * @param injectable an injectable class or a string key-value used for the binding
+   * @returns an object that resolves to an instance of T
+   */
+  static getResolver<T>(injectable: InjectableOrToken<T>): DIResolver<T>;
+  /**
+   * Get an object with a method to get all instances of the container bindings
+   * @param container the container used for the bindings
+   * @returns an object that resolves to an array of instances of T
+   */
+  static getResolver<T>(container: Container<T>): DIResolver<T[]>;
+  /**
+   * Bind a class or another constructable object so it can be fetched later.
+   * The binding method is generated automatically from the injectable and array of dependencies.
+   *
+   * **Typed overload** — when `injectable` is a concrete class (not a Token or string key), TypeScript
+   * infers the constructor-parameter types and validates each slot in `dependencies` against the
+   * corresponding parameter type via `DependenciesFor`. Both the array length and the per-position
+   * types are checked at compile time.
+   *
+   * Each dependency slot accepts:
+   * - The class itself (for object-type params)
+   * - A `Token<T>` wrapping the expected type
+   * - `DI.literal(value)` / `di.literal(value)` — a `DILiteral<T>` with matching value type
+   * - `DI.factory(fn)` / `di.factory(fn)` — a `DIFactory<T>` returning the expected type
+   * - A `string` or `Symbol` named binding (escape hatch — accepted in every slot but type-unsafe)
+   *
+   * @param injectable a constructable class whose constructor parameter types drive the dependency check
+   * @param dependencies a tuple of dependencies, one per constructor parameter, in the same order
+   * @param opts.isSingleton optional; `true` by default
+   * @param opts.lateResolve optional; defers instantiation until first property access (Proxy). Ignored in auto mode.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
+   * @returns this
+   *
+   * @example
+   * ```typescript
+   * class A { constructor(public n: number) {} }
+   * class B { constructor(public a: A, public label: string) {} }
+   *
+   * const di = new DI();
+   * di.bind(A, [di.literal(5)]);          // ✓  DILiteral<number> matches `number`
+   * di.bind(B, [A, di.literal('hello')]); // ✓  ClassConstructor<A> + DILiteral<string>
+   * di.bind(B, [di.literal(5), A]);       // ✗  compile error — wrong types in wrong slots
+   * di.bind(B, [A]);                      // ✗  compile error — too few dependencies
+   * ```
+   */
+  static bind<T extends object, Args extends readonly unknown[]>(
+    injectable: (new (...args: [...Args]) => T) | Token<T>,
+    dependencies: DependenciesFor<Args>,
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean }
+  ): this
+  /**
+   * Bind an injectable to a Container. The container will append this binding to its internal array.
+   * @param container the target Container reference
+   * @param dependency the dependency to resolve when retrieving this container item
+   * @param opts.isSingleton optional; `true` by default
+   * @param opts.lateResolve optional; defers instantiation until first property access (Proxy). Ignored in auto mode.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
+   * @example
+   * ```javascript
+   * const plugins = di.container('plugins');
+   * class PluginA {}
+   * class PluginB {}
+   * di.bind(PluginA, []);
+   * di.bind(PluginB, []);
+   *
+   * di.bind(plugins, PluginA);
+   * di.bind(plugins, PluginB);
+   *
+   * const list = di.get(plugins); // [PluginA, PluginB]
+   * ```
+   */
+  static bind<T>(
+    container: Container<T>,
+    dependency: DependencyFor<T> | BindingFunc<T>,
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean }
+  ): this;
+  /**
+   * Bind a class or another constructable object so it can be fetched later
+   * The binding method is generated automatically from the injectable and array of dependencies
+   * Passing a non constructable class or function along an array of dependencies will throw an error. Tokens are acceptable though
+   *
+   * @param injectable an injectable class used for the binding. Must be a constructable class or function
+   * @param dependencies array of dependencies to be used when instantiating the injectable. The most be specified at the same order that the constructor parameters
+   * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
+   * @param opts.lateResolve optional param to defer instantiation of this injectable until the first time a property is accessed on it.
+   * When `true`, a transparent `Proxy` is stored in the container immediately and the real instance is created on first access.
+   * This is the manual opt-in for breaking circular dependencies. It is `false` by default.
+   * **Note:** this flag is silently ignored when `autoResolveCircularDependencies` is enabled (globally or on this instance) —
+   * in that mode cycles are detected automatically and only the binding actually caught in the cycle receives a Proxy.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
+   * @returns this
+   *
+   * @example
+   * ```javascript
+   * class A {}
+   * class B {}
+   * class C {
+   *   constructor(a, b) {
+   *     this.a = a;
+   *     this.b = b;
+   *   }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(A, []);     // generates (di) => new A()
+   * di.bind(B, []);     // generates (di) => new B()
+   * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+   * ```
+   *
+   */
+  static bind<T>(
+    injectable: ClassConstructor<T> | Token<T>,
+    dependencies: Dependency[],
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean }
+  ): this;
+  /**
+   * Bind a class or another constructable object so it can be fetched later
+   * @param injectable an injectable class or a string key-value used for the binding
+   * @param func the function called when it should instantiate the object
+   * @param opts.isSingleton optional param to specify that this injectable is a singleton (only one instance can exist). It is true by default
+   * @param opts.lateResolve optional param to defer instantiation of this injectable until the first time a property is accessed on it.
+   * When `true`, a transparent `Proxy` is stored in the container immediately and the real instance is created on first access.
+   * This is the manual opt-in for breaking circular dependencies. It is `false` by default.
+   * **Note:** this flag is silently ignored when `autoResolveCircularDependencies` is enabled (globally or on this instance) —
+   * in that mode cycles are detected automatically and only the binding actually caught in the cycle receives a Proxy.
+   * @param opts.eager optional; if true, the instance is created immediately when the binding is registered.
+   * @returns this
+   *
+   * @example
+   * ```javascript
+   * class A {}
+   * class B {}
+   * class C {
+   *   constructor(a, b) {
+   *     this.a = a;
+   *     this.b = b;
+   *   }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(A, () => new A());
+   * di.bind(B, () => new B());
+   * di.bind(C, (di) => new C(di.get(A), di.get(B)));
+   * ```
+   *
+   */
+  static bind<T>(
+    injectable: InjectableOrToken<T>,
+    func: BindingFunc<T>,
+    opts?: { isSingleton?: boolean; lateResolve?: boolean; eager?: boolean }
+  ): this;
+  /**
+   * Bind a class or another constructable object so it can be fetched later
+   * The binding method is generated automatically from the injectable and array of dependencies
+   * Passing a non constructable class or function along an array of dependencies will throw an error. Tokens are acceptable though
+   *
+   * @param injectable an injectable class used for the binding. Must be a constructable class or function
+   * @returns this
+   *
+   * @example
+   * ```javascript
+   * class A {}
+   * class B {}
+   * class C {
+   *   constructor(a, b) {
+   *     this.a = a;
+   *     this.b = b;
+   *   }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(A);     // generates (di) => new A()
+   * di.bind(B);     // generates (di) => new B()
+   * di.bind(C, [A, B]); // generates (di) => new C(di.get(A), di.get(B))
+   * ```
+   *
+   */
+  static bind<T>(injectable: ClassConstructor<T> | Token<T>): this;
+  /**
+   * Remove the binding (and its cached singleton instance, if any) for a single injectable.
+   * If the cached instance exposes a `dispose()` method, it is called before the instance
+   * is removed from the container — giving it a chance to release resources (timers, connections, etc.).
+   * Errors thrown by `dispose()` are silently ignored.
+   *
+   * Has no effect when the injectable has no binding.
+   *
+   * @param injectable an injectable class, string key, Symbol, or Token
+   * @returns this
+   * @example
+   * ```javascript
+   * class DbConnection {
+   *   constructor() { this.open = true; }
+   *   dispose() { this.open = false; }
+   * }
+   *
+   * const di = new DI();
+   * di.bind(DbConnection, []);
+   *
+   * const conn = di.get(DbConnection);
+   * console.log(conn.open); // true
+   *
+   * di.unbind(DbConnection);
+   * console.log(conn.open);          // false  — dispose() was called
+   * console.log(di.has(DbConnection)); // false  — binding removed
+   * ```
+   */
+  static unbind<T>(injectable: AnyInjectable<T>): this;
+  /**
+   * Clears all containers, bindings, and sub-modules from this DI instance.
+   * This method also recursively clears all sub-modules.
+   * Before removing each cached singleton instance, `dispose()` is called on it if the method
+   * exists — giving services a chance to release resources (timers, connections, etc.).
+   * Errors thrown by `dispose()` are silently ignored.
+   * After calling clear(), the DI instance will be in a clean state as if it was just created.
+   * @returns void
+   * @example
+   * ```javascript
+   * const di = new DI();
+   * di.bind('service', () => ({ value: 'test' }));
+   *
+   * const subModule = new DI();
+   * subModule.bind('subService', () => ({ value: 'sub' }));
+   * di.subModule(subModule);
+   *
+   * console.log(di.has('service')); // true
+   * console.log(di.has('subService')); // true
+   *
+   * di.clear();
+   *
+   * console.log(di.has('service')); // false
+   * console.log(di.has('subService')); // false
+   * console.log(subModule.has('subService')); // false (sub-modules are also cleared)
+   * ```
+   */
+  static clear(): void;
 
   /**
    * Enable or disable automatic circular-dependency resolution for **this** `DI` instance.

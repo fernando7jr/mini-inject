@@ -43,6 +43,12 @@ for (const file of files) {
     combinedMarkdown += fs.readFileSync(path.join(docsSrcDir, file), 'utf8') + '\n\n';
 }
 
+const changelogFile = path.join(__dirname, '../CHANGELOG.md');
+if (fs.existsSync(changelogFile)) {
+    console.log(`   📄 Reading CHANGELOG.md...`);
+    combinedMarkdown += fs.readFileSync(changelogFile, 'utf8') + '\n\n';
+}
+
 // 3. Copy non-markdown assets (SVG, PNG, etc.) to the output docs folder
 const assets = fs.readdirSync(docsSrcDir)
     .filter(f => !f.endsWith('.md'));
@@ -82,6 +88,10 @@ function renderTable(rows) {
 // 3. Regex-based Markdown to HTML parser
 function markdownToHtml(md) {
     let html = md;
+    
+    // Fix table pipe escaping before we process inline code and tables
+    html = html.replace(/\\\|/g, '&#124;');
+    
     const codeBlocks = [];
 
     // Extract code blocks first to protect their contents from being modified
@@ -112,7 +122,7 @@ function markdownToHtml(md) {
 
     // Bold, links, inline code
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/`([^`]+)`/g, (match, code) => '<code>' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code>');
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
     // Parse Markdown tables
@@ -205,7 +215,7 @@ function markdownToHtml(md) {
 const contentHtml = markdownToHtml(combinedMarkdown);
 const toc = [];
 
-const headingRegex = /<h([23]) id="([^"]+)">([^<]+)<\/h\1>/g;
+const headingRegex = /<h([123]) id="([^"]+)">([^<]+)<\/h\1>/g;
 let match;
 while ((match = headingRegex.exec(contentHtml)) !== null) {
     toc.push({
@@ -218,7 +228,9 @@ while ((match = headingRegex.exec(contentHtml)) !== null) {
 // 5. Build Sidebar HTML
 let sidebarHtml = '<ul class="nav-list">\n';
 toc.forEach(item => {
-    const depthClass = item.level === 3 ? 'nav-item-sub' : 'nav-item-main';
+    let depthClass = 'nav-item-main';
+    if (item.level === 2) depthClass = 'nav-item-sub';
+    if (item.level === 3) depthClass = 'nav-item-sub-sub';
     sidebarHtml += `  <li class="nav-item ${depthClass}"><a href="#${item.id}">${item.text}</a></li>\n`;
 });
 sidebarHtml += '</ul>';
@@ -412,6 +424,15 @@ const template = `<!DOCTYPE html>
 
     .nav-item.nav-item-sub a {
       font-size: 13px;
+      font-weight: 400;
+    }
+
+    .nav-item.nav-item-sub-sub {
+      margin-left: 24px;
+    }
+
+    .nav-item.nav-item-sub-sub a {
+      font-size: 12px;
       font-weight: 400;
     }
 

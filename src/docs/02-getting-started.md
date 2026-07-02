@@ -54,6 +54,30 @@ console.log(c.b.value); // B
 const [a2, b2, c2] = di.getAll(A, B, C);
 ```
 
+## Global DI and Contextual Isolation
+
+`mini-inject` offers a global DI container accessible directly via the `DI` class static methods. You don't need to instantiate `new DI()` for simple applications.
+
+In addition to `.bind()` and `.get()`, the global `DI` class exposes static equivalents for `.has()`, `.getAll()`, `.getResolver()`, `.getBinding()`, `.unbind()`, and `.clear()`.
+
+```javascript
+import { DI } from 'mini-inject';
+
+// Bind and get directly from the global container
+DI.bind(A, [DI.literal(0)]);
+const a = DI.get(A); // 0
+```
+
+For tests or isolated scopes, you can temporarily isolate the global DI using `DI.runInContext(callback)`. Any `DI.bind` or `DI.get` calls inside the callback will use a fresh, isolated DI instance that is automatically cleaned up when the callback finishes.
+
+```javascript
+DI.runInContext(() => {
+    // This binding only exists inside this function
+    DI.bind(B, [DI.literal(1)]);
+    const b = DI.get(B);
+}); // Original global context is safely restored
+```
+
 ## Handling Missing Bindings
 
 If you try to resolve a class or key that has not been bound, `mini-inject` will throw an error:

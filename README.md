@@ -31,12 +31,18 @@ I am actively working on this project.
 
 Use the github page for opening issues or discussions.
 
+## Full Documentation
+
+**Please refer to the [complete documentation](https://fernando7jr.github.io/mini-inject/)** for detailed guides on all features, including Circular Dependencies, Sub-Modules, Scoped Containers (Forks), Tokens, and more.
+
 ## Usage and examples
+
+Below is a quick example of the main use cases for binding and resolving dependencies.
 
 ```javascript
 const {DI} = require('mini-inject');
-//or use the mjs file. We provide .js, .cjs and .mjs extensions
-import {DI} from 'mini-inject';
+// Or use the mjs file:
+// import {DI} from 'mini-inject';
 
 class A {
     constructor(value) {
@@ -56,17 +62,20 @@ class C {
 }
 
 const di = new DI();
+
 // Bind the classes A, B and C assigning a function for instantiation
 di
     .bind(A, (di) => new A(0))                       // A is a singleton dependency
-    .bind(B, (di) => new B(), {isSingleton: false}) // B is not a singleton dependency
-    .bind(C, (di) => new C(di.get(A), di.get(B)));  // C is a singleton dependency
+    .bind(B, (di) => new B(), {isSingleton: false})  // B is not a singleton dependency
+    .bind(C, (di) => new C(di.get(A), di.get(B)));   // C is a singleton dependency
+
 // Or let `mini-inject` generate the binding function from an array of dependencies
 di
-    .bind(A, [di.literal(0)])          // A is a singleton dependency. The param 0 is not a injectable dependency, so we set it as a literal
-    .bind(B, [], {isSingleton: false}) // B is not a singleton dependency
-    .bind(C, [A, B]);                  // C is a singleton dependency. Both A and B have bindings, so `mini-inject` will resolve it automatically
+    .bind(A, [di.literal(0)])          // Literal dependencies
+    .bind(B, [], {isSingleton: false}) // Not a singleton
+    .bind(C, [A, B]);                  // Dependencies resolved automatically
 
+// Retrieve dependencies
 const a = di.get(A);
 console.log(a.value); // 0
 a.value = 10;
@@ -74,576 +83,112 @@ a.value = 10;
 const c = di.get(C);
 console.log(c.a.value); // 10
 console.log(c.b.value); // B
-c.b.value = 'BB';
-
-const b = di.get(B);
-console.log(b.value);   // B
-console.log(c.b.value); // BB
 
 // You can also fetch everything in a single call
 const [a2, b2, c2] = di.getAll(A, B, C);
-console.log(a2.value); // 0
-console.log(b2.value);   // B
-console.log(c2.a.value); // 10
-console.log(c2.b.value); // B
 
-class D {}
-try {
-    const d = di.get(D); // There is no binding for D, this will thrown an exception
-} catch(err) {
-    console.error(err); // Error: No binding for injectable "D"
-}
-let d = di.get(D, 1);     // There is no binding for D, but since we provided a fallback no exception is thrown
-console.log(d);           // 1
-d = di.get(D, undefined); // The fallback can be anything even undefined as long as it is in the arguments list
-console.log(d);           // undefined
+// We also offer a global level DI container which is accessible directly via the DI class (an instance is not necessary!)
+DI.bind(A, [DI.literal(0)])
 
-// Circular Dependency
-/// Solved through lateResolve param
-class A1 {
-    constructor(n, a2) {
-        this.n = n;
-        this.a2 = a2;
-    }
+const a = DI.get(A); // 0
 
-    get value() {
-        return this.n + this.a2.n;
-    }
-}
+// The global level DI can also be isolated with the method runInContext
+DI.runInContext(() => {
+    DI.bind(B, [DI.literal(1)]);
+    const b = DI.get(B);
+})
+```
 
-class A2 {
-    constructor(n, a1) {
-        this.n = n;
-        this.a1 = a1; // a1 is a Proxy, as long as no property is used inside the constructor there is no circular dependency problem
-    }
+### Circular Dependencies
 
-    get value() {
-        return this.a1.n - this.n;
-    }
-}
+`mini-inject` can automatically detect and resolve circular dependencies using transparent lazy Proxies.
 
-di.bind(A1, [di.literal(5), A2], {lateResolve: true});
-di.bind(A2, [di.literal(2), A1]); // A2 will receive a late resolver for A1
-
-const a1 = di.get(A1); // Does not cause stack-overflow
-const a2 = di.get(A2); // Does not cause stack-overflow
-console.log(a1.value); // 7
-console.log(a2.value); // 3
-
-
-/// Solved automatically — no lateResolve flags needed
-// Call once at app startup, or per-instance with di.autoResolveCircularDependencies(true)
+```javascript
+// Enable automatic resolution for the whole app
 DI.autoResolveCircularDependencies(true);
 
-const di2 = new DI();
-di2.bind(A1, (di) => new A1(5, di.get(A2)));
-di2.bind(A2, (di) => new A2(2, di.get(A1))); // cycle detected at runtime; Proxy created only for the caught binding
-
-const a1 = di2.get(A1); // Does not cause stack-overflow
-const a2 = di2.get(A2); // Does not cause stack-overflow
-console.log(a1.value); // 7
-console.log(a2.value); // 3
-
-DI.autoResolveCircularDependencies(false); // restore default
-
-
-/// Neither strategy used — descriptive error thrown
-const di3 = new DI();
-di3.bind(A1, (di) => new A1(5, di.get(A2)));
-di3.bind(A2, (di) => new A2(2, di.get(A1)));
-
-try {
-    di3.get(A1); // throws immediately
-} catch (err) {
-    console.error(err.message);
-    // Circular dependency detected: A1 → A2 → A1.
-    // Use "lateResolve: true" on one of the bindings or enable
-    // "autoResolveCircularDependencies" to resolve it automatically.
-}
-
-
-/// Solved through getResolver
-class B1 {
-    constructor(n, b2) {
-        this.n = n;
-        this.b2 = b2;
-    }
-
-    get value() {
-        return this.n + this.b2.n;
-    }
-}
-
-class B2 {
-    /** @type {import('./index').DIResolver<A1>} */
-    b1 = null;
-
-    constructor(n, b1) {
-        this.n = n;
-        this.b1 = b1;
-    }
-
-    get value() {
-        return this.b1.get().n - this.n;
-    }
-}
-
-di.bind(B1, [DI.literal(5), B2]);
-di.bind(B2, [di.literal(2), di.literal(di.getResolver(B1))]); // A2 will receive a late resolver for A1
-
-const b1 = di.get(B1); // Does not cause stack-overflow
-const b2 = di.get(B2); // Does not cause stack-overflow
-console.log(b1.value); // 7
-console.log(b2.value); // 3
-
-// You can use factory functions instead of plain literals
-di.bind(B1, [DI.factory(() => 5), B2]);
-di.bind(B2, [di.factory(() => 2), di.factory((_di) => _di.getResolver(B1))]); // A2 will receive a late resolver for A1
-
-const b1 = di.get(B1); // Does not cause stack-overflow
-const b2 = di.get(B2); // Does not cause stack-overflow
-console.log(b1.value); // 7
-console.log(b2.value); // 3
-```
-
-### Automatic Circular Dependency Resolution
-
-`mini-inject` can automatically detect and resolve circular dependencies at runtime without requiring any `lateResolve` flags on your bindings.
-
-There are three ways circular dependencies are handled, applied in this priority order:
-
-| Priority | Strategy | Behavior |
-|---|---|---|
-| 1 | `DI.autoResolveCircularDependencies(true)` | All instances auto-detect cycles. `lateResolve` flags are ignored. |
-| 2 | `instance.autoResolveCircularDependencies(true)` | Only this instance auto-detects cycles. Other instances are unaffected. |
-| 3 | `lateResolve: true` on a binding | Manual opt-in; a Proxy is always created for that binding. |
-| — | Neither | A descriptive error is thrown listing the full dependency chain. |
-
-When auto mode is active (strategies 1 or 2), a lazy `Proxy` is created **only** for the binding actually caught in the cycle, not every binding involved. The Proxy is transparent — it supports `instanceof`, correct class names in logs/debuggers, and full property access.
-
-```javascript
-const {DI} = require('mini-inject');
-
-class ServiceA {
-    constructor(b) { this.b = b; }
-    greet() { return `A (b is ${this.b.name})`; }
-}
-
-class ServiceB {
-    constructor(a) { this.a = a; }
-    get name() { return 'B'; }
-    greet() { return `B (a is ${this.a.greet()})`; }
-}
-
-// --- Global flag: affects every DI instance ---
-DI.autoResolveCircularDependencies(true);
+class ServiceA { constructor(b) { this.b = b; } }
+class ServiceB { constructor(a) { this.a = a; } }
 
 const di = new DI();
-di.bind(ServiceA, (di) => new ServiceA(di.get(ServiceB)));
-di.bind(ServiceB, (di) => new ServiceB(di.get(ServiceA)));
+di.bind(ServiceA, [ServiceB]);
+di.bind(ServiceB, [ServiceA]); 
 
-const a = di.get(ServiceA);
-console.log(a instanceof ServiceA); // true  (Proxy preserves instanceof)
-console.log(a.greet());             // A (b is B)
-
-DI.autoResolveCircularDependencies(false); // restore default
-
-// --- Instance flag: affects only this DI instance ---
-const di2 = new DI();
-di2.autoResolveCircularDependencies(true);
-di2.bind(ServiceA, (di) => new ServiceA(di.get(ServiceB)));
-di2.bind(ServiceB, (di) => new ServiceB(di.get(ServiceA)));
-
-const a2 = di2.get(ServiceA); // resolves fine
-
-const di3 = new DI(); // auto mode is still off here
-di3.bind(ServiceA, (di) => new ServiceA(di.get(ServiceB)));
-di3.bind(ServiceB, (di) => new ServiceB(di.get(ServiceA)));
-
-try {
-    di3.get(ServiceA); // throws immediately — no lateResolve, no auto mode
-} catch (err) {
-    console.error(err.message);
-    // Circular dependency detected: ServiceA → ServiceB → ServiceA.
-    // Use "lateResolve: true" on one of the bindings or enable
-    // "autoResolveCircularDependencies" to resolve it automatically.
-}
+const a = di.get(ServiceA); // Works seamlessly!
 ```
 
-### Clearing DI Containers
-
-The `clear()` method allows you to reset a DI instance by clearing all containers, bindings, and sub-modules. This is particularly useful for testing scenarios or when you need to reconfigure the entire dependency injection container.
+Or manually use the flag `lateResolve: true` when binding to tag containers that should be lazily resolved.
 
 ```javascript
-const {DI} = require('mini-inject');
-
-class ServiceA {
-    value = 'Service A';
-}
-
-class ServiceB {
-    constructor(serviceA) {
-        this.serviceA = serviceA;
-        this.value = 'Service B';
-    }
-}
+class ServiceA { constructor(b) { this.b = b; } }
+class ServiceB { constructor(a) { this.a = a; } }
+class ServiceC { constructor(a, b) { this.a = a; this.b = b; } }
 
 const di = new DI();
-const subModule = new DI();
+di.bind(ServiceA, [ServiceB], {lateResolve: true});
+di.bind(ServiceB, [ServiceA], {lateResolve: true});
+di.bind(ServiceC, [ServiceA, ServiceB]);
 
-// Set up some bindings
-di.bind(ServiceA, []);
-di.bind(ServiceB, [ServiceA]);
-subModule.bind('subService', () => ({ value: 'Sub Service' }));
-di.subModule(subModule);
-
-// Verify bindings exist
-console.log(di.has(ServiceA));        // true
-console.log(di.has(ServiceB));        // true  
-console.log(di.has('subService'));    // true
-console.log(subModule.has('subService')); // true
-
-// Get instances (singletons will be cached)
-const serviceA = di.get(ServiceA);
-const serviceB = di.get(ServiceB);
-const subService = di.get('subService');
-
-console.log(serviceA.value);    // 'Service A'
-console.log(serviceB.value);    // 'Service B'
-console.log(subService.value);  // 'Sub Service'
-
-// Clear the main DI container (also clears sub-modules recursively)
-di.clear();
-
-// Verify everything is cleared
-console.log(di.has(ServiceA));        // false
-console.log(di.has(ServiceB));        // false
-console.log(di.has('subService'));    // false
-console.log(subModule.has('subService')); // false (sub-modules are also cleared)
-
-// DI can be used normally after clearing
-di.bind('newService', () => ({ value: 'New Service' }));
-console.log(di.has('newService'));    // true
-const newService = di.get('newService');
-console.log(newService.value);        // 'New Service'
+const [a, b, c] = di.getAll(ServiceA, ServiceB, ServiceC); // Works seamlessly!
 ```
 
-### Sub-Modules
+### Token, Container, Literal and Factory
 
-`mini-inject` now supports sub-modules for better managing dependencies. A sub-module is just an instance of `DI` class but is used by the parent module for resolving dependencies when the binding does not exist in the parent module.
-
-Dependency resolution works top-down, so first we check the parent module and if the biding does not exists then we check each sub-module in the order they were added.
-This means that a sub-module does not access the parent bindings but the parent can get the sub-modules bindings.
+You can inject plain values (`literal`), dynamic functions (`factory`), guarantee unique keys (`token`), or group multiple items under one key (`container`).
 
 ```javascript
-const {DI} = require('mini-inject');
-const di = new DI();
+const urlToken = di.token('DatabaseURL');
+const plugins = di.container('Plugins'); // Resolves into an array
 
-class A {}
-class B {}
-di.bind(A);
-di.bind(B);
+// Bind a primitive literal
+di.bind(urlToken, di.literal('postgres://localhost/db'));
 
-class Sub1A {}
-class Sub1B {}
-const sub1 = new DI();
-sub1.bind(Sub1A);
-sub1.bind(Sub1B);
+// Bind multiple items to the same container
+di.bind(plugins, di.factory(() => new CustomPlugin()));
+di.bind(plugins, [StandardPlugin]);
 
-class Sub2C {}
-class Sub2D {
-    constructor (sub1B, a) {
-        this.sub1B = sub1B;
-        this.a = a;
-    }
-}
-const sub2 = new DI();
-sub2.bind(Sub2C);
-sub2.bind(Sub2D, [Sub1B, A]);
-
-di.subModule(sub1, sub2);
-
-// Those work fine
-di.getAll(A, B, Sub1A, Sub1B, Sub2C); // [A, B, Sub1A, Sub1B, Sub2C]
-sub1.getAll(Sub1A, Sub1B);            // [sub1A, Sub1B]
-sub2.get(Sub2C);                      // Sub2C
-
-// Those will throw errors.
-sub1.get(A);          // sub1 does not have access to A. It throws: Error('No binding for injectable "A"')
-sub2.get(A);          // sub2 does not have access to A. It throws: Error('No binding for injectable "A"')
-sub2.get(Sub2D);      // sub2 does not have access to Sub1B. It throws: Error('No binding for injectable "Sub1B"')
-
-// The solution is to bind `Sub1B` to sub2 module or just add sub1 as a sub-module of sub2 too
-sub2.bind(Sub1B); // or sub2.subModule(sub1);
-// The same problem will still happen if a sub-module needs a dependency that is available in the parent but not in the sub-module
-sub2.get(Sub2D); // sub2 does not have access to A. It throws: Error('No binding for injectable "A"')
-// If we bind `A` to sub2 module then it will work
-sub2.bind(A);
-sub2.get(Sub2D); // Sub2D
+const url = di.get(urlToken); // 'postgres://localhost/db'
+const allPlugins = di.get(plugins); // [CustomPlugin, StandardPlugin]
 ```
 
-### Forking (Scoped Containers)
+### Sub-module and Fork
 
-`di.fork()` creates a child `DI` instance that inherits all of its parent's bindings while keeping its own isolated scope.
-
-Resolution priority inside a fork:
-1. The fork's own local bindings
-2. The fork's sub-modules
-3. The parent (transparently, up the chain)
-
-Parent singletons are **shared** — resolving a parent-bound singleton from a fork returns the same cached instance that the parent holds. Local fork bindings never affect the parent.
-
-This is the primary pattern for per-request scoping in servers, or for test isolation where you want to override a handful of bindings without rebuilding the full container:
+Organize your DI tree with sub-modules, or create scoped modules (like per-request scopes in servers) using forks.
 
 ```javascript
-const {DI} = require('mini-inject');
-
-class DbPool {
-    query(sql) { return `result of: ${sql}`; }
-}
-class UserRepo {
-    constructor(db) { this.db = db; }
-    findUser(id) { return this.db.query(`SELECT * FROM users WHERE id=${id}`); }
-}
-class RequestContext {
-    constructor(req) { this.userId = req.headers['x-user-id']; }
-}
-class OrderService {
-    constructor(userRepo, ctx) {
-        this.userRepo = userRepo;
-        this.ctx = ctx;
-    }
-    currentUserOrders() { return this.userRepo.findUser(this.ctx.userId); }
-}
-
-// Application-level container — set up once at startup
 const appDI = new DI();
-appDI.bind(DbPool, []);
-appDI.bind(UserRepo, [DbPool]);
+appDI.bind(Database, []);
 
-// Per-request fork — created and cleared on every request
-const req = {headers: {'x-user-id': '42'}};
-const reqDI = appDI.fork();
-reqDI.bind(RequestContext, () => new RequestContext(req));
-reqDI.bind(OrderService, [UserRepo, RequestContext]);
+// Sub-modules allow composing multiple DI instances together
+const authModule = new DI();
+authModule.bind(AuthService, []);
+appDI.subModule(authModule);
 
-const svc = reqDI.get(OrderService);
-console.log(svc.currentUserOrders()); // result of: SELECT * FROM users WHERE id=42
+// Fork creates an isolated scope that still shares parent singletons
+const requestDI = appDI.fork();
+requestDI.bind(CurrentUser, [di.literal('User 123')]);
 
-// DbPool and UserRepo are shared — same instances as in appDI
-console.log(reqDI.get(DbPool) === appDI.get(DbPool)); // true
-
-// End of request — disposes only the fork's local singletons; appDI is untouched
-reqDI.clear();
-console.log(appDI.has(DbPool)); // true
+requestDI.get(Database); // Returns the shared Database from appDI
+requestDI.get(AuthService); // Resolves from the attached sub-module
 ```
 
-Forks can also be used to isolate tests without rebuilding the entire application container:
+For more advanced programmatic use cases, please see the [documentation site](https://fernando7jr.github.io/mini-inject/).
 
-```javascript
-// production container
-const appDI = new DI();
-appDI.bind(DbPool, []);
-appDI.bind(UserRepo, [DbPool]);
-appDI.bind(OrderService, [UserRepo]);
-
-// test — replace only what needs to change
-const testDI = appDI.fork();
-testDI.bind(DbPool, () => new FakeDbPool()); // override
-
-const svc = testDI.get(OrderService); // OrderService → UserRepo → FakeDbPool
-```
-
-Forks can be nested as deep as needed:
-
-```javascript
-const rootDI  = new DI();   // global singletons
-const scopeDI = rootDI.fork();  // request scope
-const childDI = scopeDI.fork(); // sub-scope (e.g. a transaction)
-// childDI sees all of scopeDI's and rootDI's bindings
-```
-
-### Tokens
-
-The Token is an alternative when the developer wants more control for how the binding keys are generated.
-Instead of a plain string or symbol, Tokens can be used along a *"description"* which specifies how the key should be generated and guarantee more uniqueness.
-
-Suppose we have 2 classes of same name exported by different modules:
-````javascript
-import {C as C1} from './c1';
-import {C as C2} from './c2';
-````
-
-Attempting to bind both directly to a di module will cause conflict since `C1` and `C2` generates the same key `C`:
-````javascript
-const di = new DI();
-di.bind(C1, []);
-di.bind(C2, []);
-
-const [c1, c2] = di.getAll(C1, C2);
-console.log(c1 === c2); // prints "true"
-````
-
-By using tokens we can solve the problem above. A custom description can be passed for each token so a different key is generated:
-````javascript
-const di = new DI();
-const tokenC1 = di.token(C1, 'C1');
-const tokenC2 = di.token(C2, 'C2');
-
-di.bind(C1, []);
-di.bind(C2, []);
-
-const [c1, c2] = di.getAll(tokenC1, tokenC2);
-console.log(c1 === c2); // prints "false"
-
-// But attempting to retrieve them without the token will not work
-// The following will throw an Error
-di.get(C1); // Throws 'No binding for injectable "C1"'
-di.get('C1'); // Throws 'No binding for injectable "C1"'
-di.get(Symbol.for('C1')); // Throws 'No binding for injectable "C1"'
-````
-
-Tokens are still usable even without a custom description:
-````javascript
-class A {}
-class B {}
-
-const di = new DI();
-const tokenA = di.token(A);
-const tokenB = di.token(B);
-
-di.bind(A, []);
-di.bind(B, []);
-
-const [a, b] = di.getAll(tokenA, tokenB);
-console.log(a === b); // prints "false"
-
-// But attempting to retrieve them without the token will not work
-// The following will throw an Error
-di.get(A); // Throws 'No binding for injectable "A"'
-di.get('A'); // Throws 'No binding for injectable "A"'
-di.get(Symbol.for('A')); // Throws 'No binding for injectable "A"'
-````
-
-### Containers
-
-The `Container` concept allows you to bind multiple injectables into a single key, and when retrieved, it resolves into an array of all the elements that were bound. Each bound element preserves its own specific configuration (like `isSingleton`, `lateResolve`, or `eager`).
-
-By default, binding to the same injectable multiple times overrides the previous binding. `Container` alters this behavior to accumulate them instead.
-
-```javascript
-class PluginA {}
-class PluginB {}
-class PluginC {}
-
-const di = new DI();
-const plugins = di.container('plugins'); // Creates a Container reference
-
-// You can pass the injectables directly to the container if they are bound
-di.bind(PluginA, []);
-di.bind(PluginB, []);
-
-di.bind(plugins, PluginA, { isSingleton: true });
-di.bind(plugins, PluginB, { isSingleton: false });
-
-// You can also pass factories or use regular dependencies array
-di.bind(plugins, () => new PluginC(), { isSingleton: true });
-
-// Getting a container returns an array with all the resolved instances!
-const list = di.get(plugins);
-console.log(list.length); // 3
-console.log(list[0] instanceof PluginA); // true
-console.log(list[1] instanceof PluginB); // true
-```
-
-The options parameter on `bind` also supports the `eager: boolean` flag. When set to `true`, `mini-inject` will instantiate the binding immediately after registration rather than waiting for the first `.get()` call.
-
-### Dependency Graph Analyzer
+## Dependency Graph Analyzer
 
 `mini-inject` can generate a dependency graph for any DI module so you can understand the full dependency tree, spot potential optimizations, and detect circular dependencies before they cause problems at runtime.
 
-#### Programmatic API
+### CLI Usage
 
-```javascript
-const {DI} = require('mini-inject');
-
-class AuthService {}
-class UserService {}
-class OrderService {}
-class NotificationService {}
-
-const di = new DI();
-di.bind(AuthService, []);
-di.bind(UserService, [AuthService]);
-di.bind(OrderService, [UserService, AuthService]);
-di.bind(NotificationService, () => new NotificationService()); // custom factory
-
-// Get a serializable graph object
-const graph = di.getDependencyGraph();
-// { nodes: [...], edges: [...], cycles: [] }
-console.log(JSON.stringify(graph, null, 2));
-
-// Or get a formatted text report (header is shown by default)
-console.log(di.formatDependencyGraph());
-// mini-inject dependency graph — 4 binding(s), 0 cycle(s)
-// ═══════════════════════════════════════════════════════
-//
-// AuthService           [singleton]
-// UserService           [singleton]               AuthService
-// OrderService          [singleton]               UserService, AuthService
-// NotificationService   [singleton]               (custom initializer - unknown deps)
-
-// Without the header/summary section
-console.log(di.formatDependencyGraph({header: false}));
-
-// Static variants accept a pre-computed graph
-const graph2 = DI.getDependencyGraph(di);
-const text2  = DI.formatDependencyGraph(graph2, {header: false});
-```
-
-Circular dependencies are detected and reported without throwing — they are valid when resolved via `lateResolve: true` or `autoResolveCircularDependencies`:
-
-```javascript
-class A {}
-class B {}
-
-const di = new DI();
-di.bind(A, [B]);
-di.bind(B, [A], {lateResolve: true});
-
-console.log(di.formatDependencyGraph());
-// mini-inject dependency graph — 2 binding(s), 1 cycle(s)
-// ══════════════════════════════════════════════════════
-//
-// A   [singleton]               B  ⚠ CYCLE: A → B → A
-// B   [singleton]  lateResolve  A  ⚠ CYCLE: A → B → A
-//
-// Cycles detected:
-//   [1] A → B → A
-```
-
-The `nodes` array describes each binding:
-
-| Field | Type | Description |
-|---|---|---|
-| `key` | `string` | Display name (`"MyClass"`, `"myKey"`, `"Token<desc>"`) |
-| `isSingleton` | `boolean` | Whether the binding is a singleton |
-| `lateResolve` | `boolean` | Whether `lateResolve: true` is set on this binding |
-| `isSubModule` | `boolean` | `true` when the binding comes from an attached sub-module |
-| `deps` | `DepDescriptor[] \| null` | Dep list, or `null` when a custom factory function was used |
-
-Each `DepDescriptor` is one of:
-- `{ type: 'injectable', key: string }` — another registered injectable
-- `{ type: 'literal', value: unknown }` — a `DI.literal(...)` value
-- `{ type: 'factory', name: string | null }` — a `DI.factory(...)` function (anonymous when `name` is `null`)
-
-#### CLI
+The easiest way to analyze your DI containers is using the CLI.
 
 ```bash
 npx mini-inject analyze <path-to-file>
 ```
 
 The file must export a `DI` instance — either as `export default di` (ESM), `module.exports = di` (CJS), or as a named export.
+
+**Examples:**
 
 ```bash
 # Default: text format with header
@@ -659,93 +204,15 @@ npx mini-inject analyze ./src/container.js --no-header
 npx mini-inject analyze ./src/container.js --export=appDI
 ```
 
-## Changelog
+### Programmatic API
 
-#### 1.13.5 and 1.13.6
+You can also generate and print the graph from code using `di.getDependencyGraph()` and `di.formatDependencyGraph()`:
 
-* Published the documentation online
+```javascript
+const {DI} = require('mini-inject');
+const di = new DI();
+// ... (your bindings) ...
 
-#### 1.13.4
-
-* Added SECURITY.md
-* Included github actions
-* Executed `npm audit` and addressed all vulnerabilities
-
-#### 1.13.3
-
-* Small typescript interface correction
-
-#### 1.13.2
-
-* Fixed a critical bug in `di.clear()` where uninitialized Proxy instances (from `lateResolve: true`) were being eagerly instantiated just to check for a `dispose` method. Now, uninitialized proxies are correctly bypassed during clear.
-
-#### 1.13.1
-
-* Fixed `di.has()` and `di.getBinding()` not working for Container bindings.
-* Fixed TypeScript overload resolution for `di.get()` when passing a Container. It now correctly infers `T[]` return type.
-* Fixed the `get()` fallback behavior for Containers; it now correctly returns an empty array `[]` when `fallbackToEmptyList` is truthy and the container has no bindings, instead of returning `true`.
-
-#### 1.13.0
-
-* Added `Container` class — allows binding multiple injectables, factories, or tokens to a single container reference. When resolved, the container returns an array containing all resolved items.
-* Individual container items retain their own configuration (e.g., `isSingleton`, `lateResolve`, `eager`).
-* Improved `getAll` TypeScript typings using conditional resolution, accurately returning `T[]` when resolving a `Container<T>` while maintaining inference and backwards compatibility for existing tuple bindings.
-* Officially documented the `eager: boolean` flag in both JSDoc and `README.md`, which is intended to eventually replace manual `lateResolve` flags.
-* Container dependencies natively support resolving custom factory functions `(di) => T` for inline configurations.
-* Updated `DependencyGraph` module to identify and report `Container` contents and their corresponding downstream dependencies.
-
-#### 1.12.0
-
-* Added `di.fork()` — creates a child `DI` instance that delegates unresolved keys to its parent; parent singletons are shared, fork-local bindings stay isolated, and `clear()` on the fork never touches the parent. Supports arbitrary fork depth
-* Added `di.unbind(injectable)` — removes a single binding and its cached singleton instance; calls `dispose()` on the instance if the method exists, then removes both the binding and the cached value
-* Added `{ eager: true }` option to `bind()` — when set on a singleton binding, the instance is created immediately at bind time instead of lazily on first `get()`; silently ignored for transient bindings
-* `clear()` now calls `dispose()` on every cached singleton instance (and on sub-module instances recursively) before wiping the container, giving services a chance to release resources; errors thrown by `dispose()` are silently ignored
-* Added `di.getDependencyGraph()` / `DI.getDependencyGraph(di)` — returns a serializable graph object (`{ nodes, edges, cycles }`) describing all registered bindings, their dependency descriptors, directed edges, and any detected circular-dependency cycles
-* Added `di.formatDependencyGraph(opts?)` / `DI.formatDependencyGraph(graph, opts?)` — renders a dependency graph as a human-readable text report; pass `{ header: false }` to suppress the title and cycles-summary section
-* Added `bin/analyze.mjs` CLI — run `npx mini-inject analyze <file>` to print a dependency report for any module that exports a `DI` instance; supports `--format=text|json`, `--export=<name>`, and `--no-header`
-* Dep descriptors distinguish between `injectable` keys, `Literal<value>`, `Factory<name>`, and `null` (custom factory function — deps cannot be statically determined)
-* Token keys are displayed as `Token<description>` in all outputs
-* Bindings from attached sub-modules are included in the graph and marked with `isSubModule: true`
-* New TypeScript types: `DepDescriptor`, `GraphNode`, `GraphEdge`, `DependencyGraph`, `FormatGraphOptions`
-
-#### 1.11.0
-
-* Added `DI.autoResolveCircularDependencies(true/false)` — global static flag that automatically detects and resolves circular dependencies at runtime for all instances, without needing any `lateResolve` flags on bindings
-* Added `instance.autoResolveCircularDependencies(true/false)` — per-instance flag with the same behavior, only affecting that specific `DI` instance. The global flag takes precedence
-* When neither auto mode nor `lateResolve` is used and a cycle is encountered, `get()` now throws a descriptive error listing the full dependency chain (e.g. `"Circular dependency detected: A → B → A"`) with instructions on how to fix it
-* Updated TypeScript declarations and JSDoc for all affected methods
-
-#### 1.10.1 and 1.10.2
-
-* Improved `getAll` method signatures to use named parameters instead of tuple types
-* Fixed TypeScript compatibility with the latest TypeScript versions
-* Better type inference for `getAll` calls with 15+ parameters using spread syntax
-
-#### 1.10
-
-* Added the `clear()` method to reset DI containers, bindings, and sub-modules
-* The `clear()` method recursively clears all sub-modules to ensure complete cleanup
-* Useful for testing scenarios and reconfiguring the entire dependency injection container
-
-#### 1.9
-
-* Added support for Tokens through `di.token` method
-
-#### 1.8
-
-* Added factory for dependencies
-
-#### 1.7
-
-* Added sub-modules through the method `subModule`
-* Added the method `has` to test if there is a binding for an injectable
-* Binding now works without any parameters for constructable classes. Calling just `di.bind(A)` now works as if it were `di.bind(A, [])`
-
-#### 1.6
-
-* Added literals for dependencies
-
-#### 1.5
-
-* Binding with an empty dependency array now automatically set lateResolve flag to `false`
-* Added the method `getBinding` for accessing the inner works of the library
+// Print a formatted text report
+console.log(di.formatDependencyGraph());
+```
