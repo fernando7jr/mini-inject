@@ -114,3 +114,4 @@ index.mjs
 index.d.ts
 index.d.mts
 test/**/*
+/docs/

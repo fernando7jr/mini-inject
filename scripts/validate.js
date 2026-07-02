@@ -92,7 +92,7 @@ try {
 
 // Test CommonJS
 try {
-    const { DI: DI_CJS } = require('./index.cjs');
+    const { DI: DI_CJS } = require('../index.cjs');
     const di_cjs = new DI_CJS();
     console.log('✅ CommonJS (index.cjs) - OK');
 } catch (error) {
@@ -102,7 +102,7 @@ try {
 
 // Test main CommonJS entry
 try {
-    const { DI: DI_MAIN } = require('./index.js');
+    const { DI: DI_MAIN } = require('../index.js');
     const di_main = new DI_MAIN();
     console.log('✅ CommonJS (index.js) - OK');
 } catch (error) {
@@ -112,7 +112,7 @@ try {
 
 // Test package.json require export
 try {
-    const { DI: DI_PKG } = require('./');
+    const { DI: DI_PKG } = require('../');
     const di_pkg = new DI_PKG();
     console.log('✅ CommonJS (package require) - OK');
 } catch (error) {
@@ -122,9 +122,9 @@ try {
 
 // Test that all three return the same constructor
 try {
-    const { DI: DI1 } = require('./index.cjs');
-    const { DI: DI2 } = require('./index.js');
-    const { DI: DI3 } = require('./');
+    const { DI: DI1 } = require('../index.cjs');
+    const { DI: DI2 } = require('../index.js');
+    const { DI: DI3 } = require('../');
     
     if (DI1 === DI2 && DI2 === DI3) {
         console.log('✅ All CommonJS exports reference same constructor - OK');
@@ -151,4 +151,4 @@ console.log('   - index.d.ts, index.d.mts');
 console.log('   - package.json, README.md, LICENSE');
 
 console.log('\n🚫 Files excluded from npm package:');
-console.log('   - src/, test/, build.js, validate.js, DEVELOPMENT.md');
+console.log('   - src/, test/, scripts/, DEVELOPMENT.md');

@@ -13,8 +13,10 @@ mini-inject/
 ├── test/                       # Generated test files
 │   ├── index.test.cjs          # Generated: CommonJS tests
 │   └── index.test.mjs          # Generated: ES modules tests
-├── build.js                    # Build script to generate CJS/ESM variants
-├── validate.js                 # Package validation script
+├── scripts/                    # Build, documentation, and validation scripts
+│   ├── build.js
+│   ├── build-docs.js
+│   └── validate.js
 ├── DEVELOPMENT.md              # This file (dev-only)
 ├── index.js                    # Generated: CJS wrapper
 ├── index.cjs                   # Generated: CommonJS version
@@ -49,7 +51,7 @@ npm publish
 
 ## Build Process
 
-The `build.js` script:
+The `scripts/build.js` script:
 
 - Reads `src/mini-inject.js` (written in ES modules format)
 - Reads `src/mini-inject.d.ts` (TypeScript definitions)
@@ -73,7 +75,7 @@ The `build.js` script:
 
 - `src/` directory (source files)
 - `test/` directory (generated test files)
-- `build.js`, `validate.js` (build tools)
+- `scripts/` (build, doc generation, and validation tools)
 - `DEVELOPMENT.md` (this file)
 - `.git*` files (version control)
 
