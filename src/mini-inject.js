@@ -219,9 +219,9 @@ function formatKey(key) {
  */
 function describeRawDeps(rawDeps) {
     return rawDeps.map((dep) => {
-        if (dep instanceof DILiteral) return {type: 'literal', value: dep.value};
-        if (dep instanceof DIFactory) return {type: 'factory', name: dep.name};
-        return {type: 'injectable', key: formatKey(resolveKey(dep))};
+        if (dep instanceof DILiteral) return { type: 'literal', value: dep.value };
+        if (dep instanceof DIFactory) return { type: 'factory', name: dep.name };
+        return { type: 'injectable', key: formatKey(resolveKey(dep)) };
     });
 }
 
@@ -244,28 +244,28 @@ function detectCycles(nodes, edges) {
     // Tarjan's SCC — correctly identifies all strongly-connected components
     // regardless of traversal order, avoiding the missed-cycle bug of simple DFS.
     const nodeIndex = new Map();
-    const lowlink = new Map();
+    const lowLink = new Map();
     const onStack = new Set();
     const stack = [];
     let counter = 0;
     const sccOf = new Map(); // key → scc array (only for non-trivial SCCs)
     const nonTrivialSccs = [];
 
-    const strongconnect = (v) => {
+    const strongConnect = (v) => {
         nodeIndex.set(v, counter);
-        lowlink.set(v, counter);
+        lowLink.set(v, counter);
         counter++;
         stack.push(v);
         onStack.add(v);
         for (const w of adj.get(v) || []) {
             if (!nodeIndex.has(w)) {
-                strongconnect(w);
-                lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
+                strongConnect(w);
+                lowLink.set(v, Math.min(lowLink.get(v), lowLink.get(w)));
             } else if (onStack.has(w)) {
-                lowlink.set(v, Math.min(lowlink.get(v), nodeIndex.get(w)));
+                lowLink.set(v, Math.min(lowLink.get(v), nodeIndex.get(w)));
             }
         }
-        if (lowlink.get(v) === nodeIndex.get(v)) {
+        if (lowLink.get(v) === nodeIndex.get(v)) {
             const scc = [];
             let w;
             do {
@@ -283,7 +283,7 @@ function detectCycles(nodes, edges) {
     };
 
     for (const node of nodes) {
-        if (!nodeIndex.has(node.key)) strongconnect(node.key);
+        if (!nodeIndex.has(node.key)) strongConnect(node.key);
     }
 
     // For each non-trivial SCC, extract one representative cycle path (start key repeated at end)
@@ -314,7 +314,7 @@ function detectCycles(nodes, edges) {
         findCycle(start);
     }
 
-    return {cycles, sccOf};
+    return { cycles, sccOf };
 }
 
 /**
@@ -347,7 +347,7 @@ function formatDepText(dep) {
  * @returns {string}
  */
 function formatGraphText(graph, opts) {
-    const {header = true} = opts || {};
+    const { header = true } = opts || {};
     const lines = [];
 
     if (header) {
@@ -542,8 +542,8 @@ class DI {
                 return this.#resolveBinding(itemKey, item, {
                     has: () => item.instance !== undefined,
                     get: () => item.instance,
-                    set: (v) => {item.instance = v;},
-                    delete: () => {item.instance = undefined;}
+                    set: (v) => { item.instance = v; },
+                    delete: () => { item.instance = undefined; }
                 });
             });
         }
@@ -565,7 +565,7 @@ class DI {
                     // Cycle detected at runtime: create a Proxy now so the caller
                     // gets a valid (lazily-resolved) reference. The real instance
                     // will be set into resolverRef once the outer factory returns.
-                    const resolverRef = {instance: undefined};
+                    const resolverRef = { instance: undefined };
                     const proxy = new DIProxyBuilder(
                         () => resolverRef.instance,
                         binding.injectable,
@@ -697,19 +697,19 @@ class DI {
                 const edgeKey = JSON.stringify([node.key, dep.key]);
                 if (edgeSeen.has(edgeKey)) continue;
                 edgeSeen.add(edgeKey);
-                edges.push({from: node.key, to: dep.key, isCircular: false});
+                edges.push({ from: node.key, to: dep.key, isCircular: false });
             }
         }
 
         // Detect cycles then mark affected edges
         // An edge is circular iff both endpoints belong to the same non-trivial SCC.
-        const {cycles, sccOf} = detectCycles(nodes, edges);
+        const { cycles, sccOf } = detectCycles(nodes, edges);
         for (const edge of edges) {
             const fromScc = sccOf.get(edge.from);
             edge.isCircular = fromScc !== undefined && fromScc === sccOf.get(edge.to);
         }
 
-        return {nodes, edges, cycles};
+        return { nodes, edges, cycles };
     }
 
     /**
@@ -769,13 +769,13 @@ class DI {
                     };
                 }
             }
-            return {func: dep, deps: null};
+            return { func: dep, deps: null };
         })();
 
         const func = funcAndDeps.func;
         const rawDeps = funcAndDeps.deps;
 
-        const {isSingleton = true, lateResolve = false, eager = false} = opts || {};
+        const { isSingleton = true, lateResolve = false, eager = false } = opts || {};
         const key = resolveKey(token);
 
         if (isContainer) {
@@ -805,8 +805,8 @@ class DI {
                 this.#resolveBinding(itemKey, item, {
                     has: () => item.instance !== undefined,
                     get: () => item.instance,
-                    set: (v) => {item.instance = v;},
-                    delete: () => {item.instance = undefined;}
+                    set: (v) => { item.instance = v; },
+                    delete: () => { item.instance = undefined; }
                 });
             }
         } else {
@@ -892,4 +892,4 @@ class DI {
 }
 
 // Export for both CommonJS and ES modules
-export {DI, DILiteral, DIFactory, Token, Container};
+export { DI, DILiteral, DIFactory, Token, Container };
