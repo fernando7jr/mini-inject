@@ -1,6 +1,6 @@
 {
   "name": "mini-inject",
-  "version": "1.13.5",
+  "version": "1.13.6",
   "description": "Minimalistic dependency injection implementation",
   "type": "commonjs",
   "main": "index.js",
