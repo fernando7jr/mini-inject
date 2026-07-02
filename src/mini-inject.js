@@ -397,6 +397,8 @@ function formatGraphText(graph, opts) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+/** @type {DI | null} */
+let currentSyncContext = null;
 
 class DI {
     /** @type {Map<string|Symbol, any>} */
@@ -461,6 +463,24 @@ class DI {
     static container(injectable, description) {
         return Container.for(injectable, description);
     }
+
+    static runInContext(di, callback) {
+        const previous = currentSyncContext;
+        currentSyncContext = di;
+        try {
+            return callback();
+        } finally {
+            currentSyncContext = previous;
+        }
+    }
+
+    static bind(...args) { return (currentSyncContext || globalDI).bind(...args); }
+    static has(...args) { return (currentSyncContext || globalDI).has(...args); }
+    static get(...args) { return (currentSyncContext || globalDI).get(...args); }
+    static getAll(...args) { return (currentSyncContext || globalDI).getAll(...args); }
+    static getResolver(...args) { return (currentSyncContext || globalDI).getResolver(...args); }
+    static unbind(...args) { return (currentSyncContext || globalDI).unbind(...args); }
+    static clear() { return (currentSyncContext || globalDI).clear(); }
 
     literal(value) {
         return DI.literal(value);
@@ -762,6 +782,18 @@ class DI {
                 };
             }
             if (isContainer) {
+                if (dep instanceof DILiteral) {
+                    return {
+                        func: () => dep.value,
+                        deps: [dep]
+                    };
+                }
+                if (dep instanceof DIFactory) {
+                    return {
+                        func: (di) => dep.get(di),
+                        deps: [dep]
+                    };
+                }
                 if (typeof dep !== 'function' || isClass(dep) || dep instanceof Token || dep instanceof Container) {
                     return {
                         func: (di) => di.get(dep),
@@ -890,6 +922,8 @@ class DI {
         this.#resolutionStack.length = 0;
     }
 }
+
+const globalDI = new DI();
 
 // Export for both CommonJS and ES modules
 export { DI, DILiteral, DIFactory, Token, Container };

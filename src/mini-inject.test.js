@@ -1679,6 +1679,17 @@ test('Container: has and getBinding work correctly', (t) => {
     t.is(bindings[0].lateResolve, false);
 });
 
+test('Container: should allow literal and factory dependencies', (t) => {
+    const di = new DI();
+    const testContainer = di.container('test');
+    di.bind(testContainer, di.literal(true));
+    di.bind(testContainer, di.factory(() => false));
+    di.bind(testContainer, di.literal(2));
+
+    const result = di.get(testContainer);
+    t.deepEqual(result, [true, false, 2]);
+});
+
 test('Should not instantiate uninitialized proxies during clear', (t) => {
     let initialized = false;
     class B { }
@@ -1699,4 +1710,213 @@ test('Should not instantiate uninitialized proxies during clear', (t) => {
     di.clear();
 
     t.is(initialized, false, 'Should not be initialized during clear');
+});
+
+test('Global DI container static proxy', (t) => {
+    class A {
+        val = 1;
+    }
+    class B {
+        constructor(a) {
+            this.a = a;
+        }
+    }
+
+    // Clear global DI before test
+    DI.clear();
+
+    DI.bind(A, []);
+    DI.bind(B, [A]);
+
+    const b = DI.get(B);
+    t.true(b instanceof B);
+    t.true(b.a instanceof A);
+    t.is(b.a.val, 1);
+});
+
+test('runInContext should use scoped DI', (t) => {
+    class Config {
+        constructor(val) {
+            this.val = val;
+        }
+    }
+
+    class Service {
+        constructor() {
+            this.config = DI.get(Config);
+        }
+    }
+
+    DI.clear();
+    DI.bind(Config, () => new Config('global'));
+    DI.bind(Service, []);
+
+    // Global resolution
+    const globalService = DI.get(Service);
+    t.is(globalService.config.val, 'global');
+
+    // Scoped resolution
+    const reqDI = new DI();
+    reqDI.bind(Config, () => new Config('scoped'));
+    reqDI.bind(Service, []); // Bind it here to be resolved by reqDI
+
+    DI.runInContext(reqDI, () => {
+        const scopedService = DI.get(Service);
+        t.is(scopedService.config.val, 'scoped');
+        t.true(scopedService !== globalService);
+    });
+
+    // After context, should be back to global
+    const afterService = DI.get(Service);
+    t.is(afterService.config.val, 'global');
+});
+
+test('runInContext should restore context on error', (t) => {
+    class Config { }
+
+    DI.clear();
+    DI.bind(Config, () => 'global-config');
+
+    const reqDI = new DI();
+    reqDI.bind(Config, () => 'scoped-config');
+
+    try {
+        DI.runInContext(reqDI, () => {
+            t.is(DI.get(Config), 'scoped-config');
+            throw new Error('Test Error');
+        });
+    } catch (err) {
+        t.is(err.message, 'Test Error');
+    }
+
+    // Context must be restored!
+    t.is(DI.get(Config), 'global-config');
+});
+
+test('Static proxy methods (has, getAll, getResolver, unbind) delegate correctly', (t) => {
+    class A { }
+    class B { }
+
+    DI.clear();
+
+    // Global bindings
+    DI.bind(A, () => 'global-A');
+    DI.bind(B, () => 'global-B');
+
+    t.true(DI.has(A));
+    t.true(DI.has(B));
+
+    const [a, b] = DI.getAll(A, B);
+    t.is(a, 'global-A');
+    t.is(b, 'global-B');
+
+    const resolver = DI.getResolver(A);
+    t.is(resolver.get(), 'global-A');
+
+    // Test context switching for the same methods
+    const scoped = new DI();
+    scoped.bind(A, () => 'scoped-A');
+
+    DI.runInContext(scoped, () => {
+        t.true(DI.has(A));
+        t.false(DI.has(B)); // Scoped doesn't have B!
+
+        const [scopedA] = DI.getAll(A);
+        t.is(scopedA, 'scoped-A');
+
+        const scopedResolver = DI.getResolver(A);
+        t.is(scopedResolver.get(), 'scoped-A');
+
+        DI.unbind(A);
+        t.false(DI.has(A)); // Unbound from scoped
+    });
+
+    // Verify global is unaffected by the scoped unbind
+    t.true(DI.has(A));
+    t.is(DI.get(A), 'global-A');
+});
+
+test('removeSubModule: should remove a previously added sub-module', (t) => {
+    const parent = new DI();
+    const child = new DI();
+    
+    parent.subModule(child);
+    child.bind('child-dep', () => 'child-value');
+    
+    t.is(parent.get('child-dep'), 'child-value');
+    
+    parent.removeSubModule(child);
+    t.throws(() => parent.get('child-dep'), { message: 'No binding for injectable "child-dep"' });
+    
+    // Removing an unknown module should be a no-op
+    parent.removeSubModule(new DI());
+    t.pass();
+});
+
+test('getDependencyGraph: should format container bindings correctly', (t) => {
+    const di = new DI();
+    const container = di.container('my-container');
+    
+    di.bind('A', () => 'a');
+    di.bind('B', () => 'b');
+    di.bind(container, 'A');
+    di.bind(container, 'B');
+    di.bind(container, di.literal(123));
+    
+    const graph = di.getDependencyGraph();
+    const containerNode = graph.nodes.find(n => n.key === 'Container<my-container>');
+    
+    t.truthy(containerNode);
+    t.false(containerNode.isSingleton);
+    t.deepEqual(containerNode.deps, [
+        { type: 'injectable', key: 'A' },
+        { type: 'injectable', key: 'B' },
+        { type: 'literal', value: 123 }
+    ]);
+});
+
+test('formatDependencyGraph: should handle circular objects and BigInt in DILiteral', (t) => {
+    const di = new DI();
+    const obj = {};
+    obj.self = obj; // Circular reference
+    
+    class DummyClass {}
+    
+    di.bind(DummyClass, [di.literal(obj)]);
+    // eslint-disable-next-line no-undef
+    di.bind('B', di.literal(typeof BigInt !== 'undefined' ? BigInt(9007199254740991n) : 'bigint-fallback'));
+    
+    const text = DI.formatDependencyGraph(di.getDependencyGraph());
+    t.truthy(text.includes('Literal<[object Object]>') || text.includes('Literal<')); 
+});
+
+test('autoResolveCircularDependencies: should cleanup proxy if factory throws an error', (t) => {
+    const di = new DI();
+    di.autoResolveCircularDependencies(true);
+    
+    class A {
+        constructor(b) {
+            this.b = b;
+            throw new Error('Constructor Error');
+        }
+    }
+    
+    class B {
+        constructor(a) {
+            this.a = a;
+        }
+    }
+    
+    di.bind(A, [B]);
+    di.bind(B, [A]);
+    
+    // A -> B -> A
+    // When B gets A, it will receive a proxy because of autoResolveCircularDependencies.
+    // Then B returns.
+    // Then A's factory executes (with B), and throws.
+    t.throws(() => di.get(A), { message: 'Constructor Error' });
+    
+    // The proxy should be cleaned up. If we try to get A again, it should throw the same constructor error, 
+    // not use a corrupted cached proxy.
+    t.throws(() => di.get(A), { message: 'Constructor Error' });
 });
